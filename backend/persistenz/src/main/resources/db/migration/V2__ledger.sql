@@ -110,7 +110,7 @@ COMMENT ON TABLE bewegung IS
 -- -----------------------------------------------------------------------------
 CREATE TABLE kategoriegruppe (
     id           uuid         PRIMARY KEY,
-    bezeichnung  text         NOT NULL CHECK (bezeichnung <> ''),
+    bezeichnung  text         NOT NULL CHECK (length(btrim(bezeichnung)) > 0),
     sortierung   integer      NOT NULL DEFAULT 0,
     angelegt_am  timestamptz  NOT NULL DEFAULT now(),
     CONSTRAINT kategoriegruppe_bezeichnung_eindeutig UNIQUE (bezeichnung)
@@ -122,7 +122,7 @@ COMMENT ON TABLE kategoriegruppe IS
 CREATE TABLE kategorie (
     id           uuid         PRIMARY KEY,
     gruppe_id    uuid         NOT NULL REFERENCES kategoriegruppe (id) ON DELETE RESTRICT,
-    bezeichnung  text         NOT NULL CHECK (bezeichnung <> ''),
+    bezeichnung  text         NOT NULL CHECK (length(btrim(bezeichnung)) > 0),
     aktiv        boolean      NOT NULL DEFAULT true,
     angelegt_am  timestamptz  NOT NULL DEFAULT now(),
     CONSTRAINT kategorie_bezeichnung_eindeutig UNIQUE (bezeichnung)
@@ -154,7 +154,7 @@ CREATE INDEX kategorie_gruppe_idx ON kategorie (gruppe_id);
 CREATE TABLE kontoauszug (
     id             uuid           PRIMARY KEY,
     konto_id       uuid           NOT NULL REFERENCES konto (id) ON DELETE RESTRICT,
-    auszugsnummer  text           NOT NULL CHECK (auszugsnummer <> ''),
+    auszugsnummer  text           NOT NULL CHECK (length(btrim(auszugsnummer)) > 0),
     quelle         text           NOT NULL CHECK (quelle IN ('MT940', 'CAMT052')),
     anfangssaldo   numeric(14,2)  NOT NULL,
     endsaldo       numeric(14,2)  NOT NULL,
@@ -227,7 +227,7 @@ CREATE TABLE buchung (
 
     -- Grundlage der Deduplizierung (I4). Exportzeitraeume ueberlappen sich an
     -- den Randtagen; ohne diesen Schluessel entstehen Doubletten.
-    bankreferenz         text           NOT NULL CHECK (bankreferenz <> ''),
+    bankreferenz         text           NOT NULL CHECK (length(btrim(bankreferenz)) > 0),
 
     -- Die strukturierten Felder. Einzeln, siehe Begruendung oben.
     gegenpartei_name     text,
