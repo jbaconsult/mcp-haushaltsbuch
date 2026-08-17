@@ -116,8 +116,25 @@ nicht versehentlich in eine echte Umgebung tragen.
 
 ### `images`
 
-Baut Backend- und Frontend-Image über Buildx mit GitHub-Actions-Cache. Läuft nur, wenn
-`backend` und `frontend` grün sind.
+Baut Backend- und Frontend-Image mit Buildx. Läuft nur, wenn `backend` und `frontend`
+grün sind.
+
+### Warum ohne die Docker-Actions
+
+Der Job ruft `docker buildx build`, `docker login` und `docker buildx create` **direkt**
+auf, statt `docker/build-push-action` und Geschwister zu verwenden.
+
+Der Grund ist Erfahrung aus diesem Repo: die Auslieferung dieser Actions über
+`codeload.github.com` antwortete wiederholt mit HTTP 429 und liess den Job umfallen,
+*bevor überhaupt ein Byte gebaut wurde*. `max-parallel: 1` half nicht — es traf dann eben
+den anderen Matrix-Job.
+
+Docker und Buildx sind auf den Runnern vorinstalliert. Die paar Zeilen Shell hängen von
+nichts ab, das erst heruntergeladen werden muss.
+
+Der Cache liegt deshalb in der **Registry** (`ghcr.io/…/<image>:cache`) statt in
+`type=gha`: letzterer braucht Umgebungsvariablen, die sonst `setup-buildx-action` setzt.
+Registry-Cache kommt mit dem Zugang aus, den der Push ohnehin benötigt.
 
 **Tagging:**
 
@@ -129,6 +146,11 @@ Baut Backend- und Frontend-Image über Buildx mit GitHub-Actions-Cache. Läuft n
 Der SHA-Tag existiert, weil ein reiner `pr-42`-Tag mit jedem Push überschrieben wird. Will
 man später nachvollziehen, welches Image zu einem bestimmten Stand gehörte, braucht man
 den unveränderlichen Tag.
+
+Eine Eigenheit dabei: bei `pull_request`-Ereignissen zeigt `GITHUB_SHA` auf den
+**Merge-Commit**, nicht auf den Branch-Head. Der Tag benennt also den Stand, der
+tatsächlich geprüft wurde — er lässt sich aber nicht direkt in der Branch-Historie
+wiederfinden.
 
 **Bei Pull Requests aus Forks wird nicht gepusht.** Ein Fork-PR hat keinen Schreibzugriff
 auf die Registry — der Versuch würde den Lauf ohne Erkenntnisgewinn rot färben. Gebaut
@@ -143,8 +165,28 @@ GitHub Container Registry, Namensraum `ghcr.io/<eigentuemer>/mcp-haushaltsbuch`:
 | `…/backend` | Quarkus im JVM-Modus, Temurin-21-JRE |
 | `…/frontend` | Next.js Standalone auf Node 24 Alpine |
 
+Beide tragen zusätzlich einen `cache`-Tag. Das ist kein lauffähiges Image, sondern der
+Build-Cache — nicht wundern und nicht deployen.
+
 Authentifizierung über `GITHUB_TOKEN` — kein zusätzliches Geheimnis nötig. Die Berechtigung
 `packages: write` steht nur im `images`-Job, nicht am Workflow.
+
+### Eine Falle im Backend-Dockerfile
+
+Der Maven-Aufruf im Image-Build läuft mit einem BuildKit-Cache-Mount auf
+`/root/.m2/repository` — und **ohne** vorgeschaltetes `dependency:go-offline`.
+
+Das war einmal anders und hat sporadisch versagt: schlug der Vorab-Download teilweise
+fehl, verschluckte ein `|| true` den Fehler und hinterliess negative Einträge im lokalen
+Repository. Der eigentliche Build übernahm sie und brach ab mit
+
+```
+Non-resolvable import POM: ... quarkus-bom:pom:3.33.3.1 (absent)
+```
+
+`absent` ist Mavens Marker für einen zwischengespeicherten Fehlversuch, nicht für ein
+fehlendes Artefakt — die Meldung führt in die Irre. Wer das Dockerfile wieder um einen
+Vorab-Auflösungsschritt ergänzt, holt sich diesen Fehler zurück.
 
 ## Keycloak in der CI
 

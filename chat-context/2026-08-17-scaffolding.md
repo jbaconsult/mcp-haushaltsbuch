@@ -136,6 +136,54 @@ Angelegt: `CLAUDE.md`, `backend/` als Maven-Multimodul mit `kern`, `persistenz`,
 `api`, `app`; `frontend/` mit BFF; `docker-compose.yml` und `docker-compose.ci.yml`;
 `.github/workflows/pull-request.yml`; `doc/` und `chat-context/`.
 
+## Was die Pipeline gefunden hat
+
+Der erste Pull Request brauchte sechs Läufe bis grün. Alle fünf Fehler waren echt und
+hätten sonst später wehgetan; jede Schicht machte die nächste erst sichtbar, sobald sie
+selbst funktionierte.
+
+**1. Keycloak lehnt unbekannte Felder im Realm-Import ab.** Erläuterungen als
+`_kommentar`-Felder brachen den Import mit `Unrecognized field ... not marked as
+ignorable`, der Container beendete sich mit Exit-Code 1. JSON hat keine Kommentarsyntax,
+und Keycloak bietet keinen Ersatz — die Erläuterungen stehen jetzt in
+`infra/keycloak/README.md`.
+
+**2. Ein Healthcheck darf nicht die Abhängigkeiten prüfen.** Der Frontend-Healthcheck rief
+die Startseite auf, und die befragt das Backend. Damit galt das Frontend als krank, sobald
+eine Abhängigkeit nicht antwortete — obwohl Next.js sauber lief. Ausfälle kaskadieren so,
+und ein Neustart behebt nichts. Neu ist `/api/gesundheit`, der ausschliesslich aus dem
+eigenen Prozess antwortet.
+
+**3. `quarkus.flyway.locations` ist eine Build-Zeit-Property.** Der Versuch, den
+Demo-Datensatz per Umgebungsvariable im Compose einzuschalten, wirkte nicht; Quarkus
+meldete beim Start nur `build time fixed to 'db/migration'` und migrierte weiter. Die
+Zuordnung der Keycloak-Kennungen fehlte, jede Anmeldung sah null Konten. Jetzt lädt ein
+eigener Compose-Dienst die Daten per `psql` — mit dem Nebeneffekt, dass das
+Produktionsimage keine Demodaten kennt.
+
+**4. Der Principal-Name ist nicht der Subject.** Quarkus nimmt standardmässig `upn`,
+ersatzweise `preferred_username`. Der Filter bekam `demo-eins` statt der Kennung und fand
+nichts. `quarkus.oidc.token.principal-claim=sub` stellt das richtig — der Subject ist
+ohnehin die richtige Wahl, weil er unveränderlich ist.
+
+**5. `|| true` über einem Cache-Schritt ist eine Zeitbombe.** Das vorgeschaltete
+`dependency:go-offline ... || true` im Backend-Dockerfile verschluckte einen
+Teil-Fehlschlag und schrieb negative Einträge ins lokale Maven-Repository. Der eigentliche
+Build übernahm sie und scheiterte an `quarkus-bom ... (absent)` — an einem Artefakt, das es
+sehr wohl gibt. In Lauf 1 war derselbe Schritt grün, weil der Download vollständig
+durchlief. Ersetzt durch einen BuildKit-Cache-Mount.
+
+**Ausserdem, nicht unser Fehler:** die Auslieferung der `docker/*`-Actions über
+`codeload.github.com` antwortete in drei von vier Läufen mit HTTP 429 und liess den Job
+umfallen, bevor ein Byte gebaut war. `max-parallel: 1` half nicht. Die Image-Jobs rufen
+jetzt die vorinstallierte Docker-CLI direkt auf und hängen von nichts ab, das erst
+heruntergeladen werden muss.
+
+Die Fehler 3 und 4 sind bemerkenswert, weil sie sich beide als „null Konten" zeigten. Das
+ist kein Zufall, sondern die Fail-Closed-Voreinstellung bei der Arbeit: fehlt der
+Benutzerkontext, kommt nichts zurück — kein Fehler, keine Teilmenge. Der Test hat den
+Datenmangel sichtbar gemacht, statt ihn zu überdecken.
+
 ## Offen geblieben
 
 **Der Ledger-Kern.** `status.projektphase` nennt ihn als offene Kernentscheidung für
