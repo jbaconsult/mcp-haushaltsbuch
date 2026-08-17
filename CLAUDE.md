@@ -211,6 +211,19 @@ make pruefen       # das, was auch die CI im PR prüft
 `make pruefen` muss grün sein. Die PR-Pipeline führt dieselben Schritte aus; ein rotes
 lokales Ergebnis wird im PR nicht besser.
 
+### Ablieferung eines Auftrags
+
+Ein Auftrag ist fertig, wenn er im Repository steht — nicht, wenn er im Arbeitsbaum liegt.
+Der Endzustand ist immer:
+
+1. Ein eigener Branch, benannt nach dem Auftrag.
+2. `make pruefen` grün, dann alles committet. `git status` ist leer.
+3. Branch gepusht, Pull Request nach `main`, Beschreibung auf Deutsch.
+
+Ein Bericht im Gespräch ersetzt keinen dieser drei Schritte. Uncommittete Arbeit überlebt
+keinen Branchwechsel, den jemand anders auslöst — und wer sie liegen lässt, verlagert das
+Risiko auf den Nächsten, der das Verzeichnis anfasst.
+
 ### Testdaten
 
 Zielbild ist Open Source. Deshalb gilt ausnahmslos:
