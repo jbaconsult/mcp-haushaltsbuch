@@ -40,7 +40,12 @@ jobs:
     timeout-minutes: 25
 
     steps:
+      # fetch-depth: 0 wegen Sonar. Die Analyse braucht die Historie, um "neuen
+      # Code" von altem zu unterscheiden - mit einem flachen Klon hält sie alles
+      # für neu, und die Schwelle auf neuem Code wird bedeutungslos.
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: JDK einrichten
         uses: actions/setup-java@v5
@@ -49,12 +54,102 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
           cache: maven
 
+      - name: Sonar-Zwischenspeicher
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: sonar-${{ runner.os }}
+          restore-keys: sonar-${{ runner.os }}
+
       # Deckt Kompilierung, Spotless-Formatprüfung, Unit-Tests und die
       # Integrationstests ab - darunter der RLS-Test, der über Quarkus Dev
       # Services echtes PostgreSQL startet. Docker steht auf den Runnern bereit.
+      # JaCoCo hängt sich an und schreibt die Abdeckung je Modul.
       - name: Bauen und testen
         working-directory: backend
         run: ./mvnw -B verify
+
+      # Getrennter Aufruf, nicht "verify sonar:sonar" in einem: die Analyse soll
+      # laufen, nachdem die Tests durch sind, und ihr Fehlschlag soll vom
+      # Testfehlschlag unterscheidbar bleiben.
+      #
+      # Fork-Pull-Requests haben keinen Zugriff auf das Geheimnis. Der Versuch
+      # würde den Lauf rot färben, ohne dass jemand etwas dagegen tun könnte.
+      - name: SonarCloud-Analyse
+        id: sonar
+        if: ${{ github.event.pull_request.head.repo.fork != true }}
+        working-directory: backend
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          # Ohne dieses Token findet Sonar die Pull-Request-Nummer nicht und
+          # analysiert gegen den falschen Bezugspunkt.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Der haeufigste Fehlschlag hier hat eine Ursache ausserhalb des Repos und
+        # eine Meldung, die zwischen zweihundert Maven-Zeilen untergeht. Deshalb
+        # wird sie herausgefischt und als Annotation wiederholt - sonst sucht der
+        # Naechste sie noch einmal.
+        run: |
+          set -o pipefail
+          if ! ./mvnw -B sonar:sonar 2>&1 | tee sonar.log; then
+            if grep -q "Automatic Analysis is enabled" sonar.log; then
+              echo "::error::In SonarCloud laeuft noch die automatische Analyse. Beides gleichzeitig geht nicht - abschalten unter Administration -> Analysis Method, dann diesen Lauf wiederholen."
+            fi
+            exit 1
+          fi
+
+      # Bewusst in Shell statt über sonarqube-quality-gate-action: dieselbe
+      # Begründung wie bei den Docker-Actions weiter unten - eine Action, die
+      # erst heruntergeladen werden muss, ist ein Ausfallgrund mehr.
+      #
+      # report-task.txt entsteht bei der Analyse und enthält die URL des
+      # Auswertungsauftrags. Erst wenn der durch ist, steht die Schwelle fest.
+      - name: Qualitätsschwelle abwarten
+        if: ${{ steps.sonar.outcome == 'success' }}
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          bericht=backend/target/sonar/report-task.txt
+          if [ ! -f "$bericht" ]; then
+            echo "::error::$bericht fehlt - die Analyse hat nichts hinterlassen."
+            exit 1
+          fi
+
+          auftrag=$(grep '^ceTaskUrl=' "$bericht" | cut -d= -f2-)
+          echo "Auswertungsauftrag: $auftrag"
+
+          for versuch in $(seq 1 60); do
+            zustand=$(curl -sf -u "${SONAR_TOKEN}:" "$auftrag" | jq -r .task.status)
+            case "$zustand" in
+              SUCCESS) break ;;
+              FAILED|CANCELED)
+                echo "::error::Auswertung endete mit $zustand."
+                exit 1 ;;
+              *) sleep 5 ;;
+            esac
+          done
+
+          if [ "$zustand" != "SUCCESS" ]; then
+            echo "::error::Auswertung nach fünf Minuten nicht abgeschlossen."
+            exit 1
+          fi
+
+          analyse=$(curl -sf -u "${SONAR_TOKEN}:" "$auftrag" | jq -r .task.analysisId)
+          schwelle=$(curl -sf -u "${SONAR_TOKEN}:" \
+            "https://sonarcloud.io/api/qualitygates/project_status?analysisId=${analyse}")
+
+          echo "$schwelle" | jq .
+          zustand=$(echo "$schwelle" | jq -r .projectStatus.status)
+
+          if [ "$zustand" != "OK" ]; then
+            echo "::error::Qualitätsschwelle nicht bestanden ($zustand)."
+            echo "$schwelle" | jq -r '.projectStatus.conditions[] | select(.status != "OK")
+              | "  \(.metricKey): \(.actualValue) (verlangt \(.comparator) \(.errorThreshold))"'
+            exit 1
+          fi
+
+          echo "Qualitätsschwelle bestanden."
 
       # Auch bei rotem Lauf hochladen. Ein Fehlschlag ohne Bericht ist doppelt
       # ärgerlich.

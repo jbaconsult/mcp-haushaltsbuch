@@ -41,6 +41,17 @@
             <artifactId>quarkus-junit</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Ohne diese Erweiterung misst JaCoCo die Integrationstests nicht.
+             Hibernate und Panache verändern den Bytecode der Entitäten und
+             Repositories beim Start; die geladene Klasse stimmt dann nicht mehr
+             mit der auf der Platte überein, und JaCoCo verwirft die Messung
+             stillschweigend. "persistenz" stand deshalb auf null Prozent, obwohl
+             RlsZugriffTest genau dort hineinläuft. -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-jacoco</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>io.rest-assured</groupId>
             <artifactId>rest-assured</artifactId>
