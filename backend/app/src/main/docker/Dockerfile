@@ -14,26 +14,37 @@ FROM maven:3.9-eclipse-temurin-21 AS bau
 
 WORKDIR /bau
 
-# Zuerst nur die POMs kopieren und Abhaengigkeiten laden. Diese Schicht bleibt im
-# Cache, solange sich keine Abhaengigkeit aendert - Quellcodeaenderungen loesen
-# dann keinen erneuten Download aus.
 COPY pom.xml .
-COPY kern/pom.xml       kern/
-COPY persistenz/pom.xml persistenz/
-COPY mcp/pom.xml        mcp/
-COPY api/pom.xml        api/
-COPY app/pom.xml        app/
-RUN mvn -B -q dependency:go-offline -DskipTests || true
-
 COPY kern       kern/
 COPY persistenz persistenz/
 COPY mcp        mcp/
 COPY api        api/
 COPY app        app/
 
-# Tests laufen in der CI, nicht im Image-Build: sie brauchen Docker fuer die
-# Testcontainer, und Docker-in-Docker im Buildschritt ist mehr Aufwand als Nutzen.
-RUN mvn -B -q package -DskipTests
+# Ein einziger Maven-Aufruf, und das lokale Repository liegt in einem
+# BuildKit-Cache statt in einer Image-Schicht.
+#
+# Frueher stand hier ein vorgeschaltetes "dependency:go-offline ... || true", um
+# die Abhaengigkeiten in einer eigenen, selten wechselnden Schicht zu halten. Das
+# war ein Fehler: schlug der Download teilweise fehl, verschluckte das "|| true"
+# den Fehler und hinterliess im lokalen Repository negative Eintraege. Der
+# eigentliche Build uebernahm sie und brach mit
+#
+#     Non-resolvable import POM: ... quarkus-bom:pom:3.33.3.1 (absent)
+#
+# ab - "absent" ist Mavens Marker fuer einen zwischengespeicherten Fehlversuch,
+# nicht fuer ein fehlendes Artefakt. Der Cache-Mount erfuellt denselben Zweck,
+# ohne dass ein Fehlschlag stillschweigend festgeschrieben wird.
+#
+# retryHandler faengt vereinzelte Netzwerkfehler ab, statt den ganzen Build daran
+# scheitern zu lassen.
+#
+# Tests laufen in der CI, nicht hier: sie brauchen Docker fuer die Testcontainer,
+# und Docker-in-Docker im Buildschritt ist mehr Aufwand als Nutzen.
+RUN --mount=type=cache,target=/root/.m2/repository \
+    mvn -B package -DskipTests \
+        -Dmaven.wagon.http.retryHandler.count=3 \
+        -Dmaven.wagon.httpconnectionManager.ttlSeconds=120
 
 
 # --- Laufen ------------------------------------------------------------------
