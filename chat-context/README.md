@@ -55,3 +55,16 @@ Aggregierte Größen sind in Ordnung, wenn sie zum Verständnis einer Entscheidu
 | Datum | Thema |
 |---|---|
 | [2026-08-17](2026-08-17-scaffolding.md) | Scaffolding: Stack, Struktur, Zugriffskontrolle, CI |
+| [2026-08-17](2026-08-17-dispatch-ledger-grundschema.md) | Dispatch: Ledger-Grundschema und validierender Importer |
+| [2026-08-17](2026-08-17-rueckgabe-ledger-grundschema.md) | Rückgabe zum Dispatch Ledger-Grundschema |
+
+## Aufträge und ihre Rückgaben
+
+Ein Dispatch beschreibt einen Auftrag, eine Rückgabe berichtet gegen ihn. Beide liegen hier,
+weil sie zusammen den Weg einer Umsetzung erzählen — der Dispatch, was verlangt war, die
+Rückgabe, was daraus wurde und was unterwegs auffiel.
+
+Eine Rückgabe folgt der Gliederung ihres Dispatches, damit sie sich Punkt für Punkt dagegen
+lesen lässt. Ihre wichtigsten Abschnitte sind dieselben wie hier: **Befunde außerhalb des
+Auftrags** und **Offen geblieben**. Was dort nicht steht, ist beim nächsten Zuschnitt
+verloren.
