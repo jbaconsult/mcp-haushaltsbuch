@@ -185,9 +185,26 @@ jobs:
 
           echo "Zugriffskontrolle greift."
 
-      - name: Protokolle bei Fehlschlag
+      # Ohne diese Ausgabe ist ein Fehlschlag hier kaum zu deuten: "container X
+      # is unhealthy" nennt weder den geprüften Befehl noch dessen Ausgabe.
+      # Genau die steht in der Health-Historie.
+      - name: Diagnose bei Fehlschlag
         if: failure()
-        run: docker compose -f docker-compose.ci.yml logs --tail 200
+        run: |
+          echo "### Zustand der Container"
+          docker compose -f docker-compose.ci.yml ps -a
+
+          echo
+          echo "### Health-Historie"
+          for c in $(docker compose -f docker-compose.ci.yml ps -aq); do
+            name=$(docker inspect --format '{{.Name}}' "$c")
+            echo "--- $name"
+            docker inspect --format '{{json .State.Health}}' "$c" | jq '.' 2>/dev/null || echo "(kein Healthcheck)"
+          done
+
+          echo
+          echo "### Protokolle"
+          docker compose -f docker-compose.ci.yml logs --tail 200
 
       - name: Stapel stoppen
         if: always()

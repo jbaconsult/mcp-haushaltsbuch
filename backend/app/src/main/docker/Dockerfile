@@ -59,7 +59,10 @@ ENV JAVA_OPTS_APPEND="-XX:MaxRAMPercentage=75"
 
 # Der Health-Endpunkt kommt aus quarkus-smallrye-health und ist in der
 # Konfiguration ausdruecklich von der Anmeldepflicht ausgenommen.
-HEALTHCHECK --interval=15s --timeout=3s --start-period=40s --retries=5 \
-    CMD wget -qO- http://localhost:8080/q/health/ready || exit 1
+#
+# 127.0.0.1 statt localhost: letzteres kann im Container auf ::1 auflösen, wo
+# der Server nicht lauscht.
+HEALTHCHECK --interval=15s --timeout=5s --start-period=40s --retries=6 \
+    CMD wget -qO- http://127.0.0.1:8080/q/health/ready >/dev/null || exit 1
 
 ENTRYPOINT ["java", "-jar", "/anwendung/quarkus-run.jar"]
