@@ -1,0 +1,104 @@
+# =============================================================================
+# Vollständiger Stack mit eigenem Identity-Provider
+#
+#   make hoch-ci
+#
+# Verwendet in zwei Fällen:
+#   1. In der CI. Ein Pull Request, der rot wird, weil ein externer Keycloak
+#      gerade neu startet, kostet mehr Vertrauen in die Pipeline, als die
+#      Realitätsnähe wert ist. Eine Pipeline, der man nicht glaubt, wird
+#      ignoriert - und ist damit wertlos.
+#   2. Lokal, wenn auth.jbaconsult.com nicht erreichbar ist.
+#
+# Eigenständige Datei, kein Overlay: alle Zugangsdaten sind bewusst offene
+# Testwerte, und die dürfen nicht versehentlich in den Entwicklungsstack
+# geraten. Ein "docker compose -f a.yml -f b.yml" mit halb überschriebenen
+# Geheimnissen ist genau die Art Konfiguration, bei der so etwas passiert.
+#
+# Anmeldung: demo-eins / ci-passwort, demo-zwei / ci-passwort
+# =============================================================================
+
+name: haushaltsbuch-ci
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: haushaltsbuch
+      POSTGRES_USER: haushaltsbuch_eigentuemer
+      POSTGRES_PASSWORD: ci-passwort
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U haushaltsbuch_eigentuemer -d haushaltsbuch"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ci-passwort
+      KC_HEALTH_ENABLED: "true"
+      # Der Aussteller im Token muss zu der Adresse passen, unter der das
+      # Backend den Realm prüft. Ohne diese Zeile trägt das Token die Adresse
+      # ein, über die der Browser kam - und die Prüfung scheitert mit einer
+      # Meldung, die nach einem Schlüsselproblem aussieht.
+      KC_HOSTNAME: http://keycloak:8080
+      KC_HOSTNAME_STRICT: "false"
+    volumes:
+      - ./infra/keycloak:/opt/keycloak/data/import:ro
+    ports:
+      - "8081:8080"
+    healthcheck:
+      # Der Management-Port 9000 trägt seit Keycloak 25 die Health-Endpunkte.
+      # Das Image bringt weder curl noch wget mit, deshalb der Umweg über die
+      # Bash-eigene Netzwerkumleitung.
+      test:
+        [
+          "CMD-SHELL",
+          "exec 3<>/dev/tcp/localhost/9000; echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3; grep -q '\"UP\"' <&3",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: app/src/main/docker/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: haushaltsbuch
+      POSTGRES_USER: haushaltsbuch_eigentuemer
+      POSTGRES_PASSWORD: ci-passwort
+
+      OIDC_AUTH_SERVER_URL: http://keycloak:8080/realms/haushaltsbuch
+      OIDC_CLIENT_ID: haushaltsbuch-backend
+      OIDC_CLIENT_SECRET: ci-geheimnis-backend
+
+      # Synthetischer Demo-Datensatz auch im Produktionsprofil. Er enthält die
+      # Zuordnung der Keycloak-Benutzerkennungen auf die fachlichen Benutzer -
+      # ohne sie könnte sich zwar jemand anmelden, sähe aber nichts.
+      QUARKUS_FLYWAY_LOCATIONS: db/migration,db/demodaten
+    ports:
+      - "8080:8080"
+
+  frontend:
+    build:
+      context: ./frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      BACKEND_BASE_URL: http://backend:8080
+    ports:
+      - "3000:3000"

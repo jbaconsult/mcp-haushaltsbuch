@@ -1,0 +1,158 @@
+# CI-Pipeline
+
+## Auslöser
+
+Jeder Pull Request nach `main` sowie Pushes auf `main`.
+
+Läuft ein zweiter Push auf denselben Branch, wird der vorherige Lauf abgebrochen
+(`concurrency` mit `cancel-in-progress`). Ein Lauf gegen einen überholten Commit hilft
+niemandem und belegt nur einen Runner.
+
+## Aufbau
+
+```
+   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+   │   backend    │  │   frontend   │  │    stapel    │   parallel
+   │ Build, Test  │  │ Lint, Types, │  │ Compose mit  │
+   │ Spotless     │  │ Test, Build  │  │ Keycloak     │
+   └──────┬───────┘  └──────┬───────┘  └──────┬───────┘
+          └────────┬────────┘                 │
+                   ▼                          │
+            ┌──────────────┐                  │
+            │    images    │ Multi-Stage      │
+            │  nach GHCR   │                  │
+            └──────┬───────┘                  │
+                   └───────────┬──────────────┘
+                               ▼
+                        ┌──────────────┐
+                        │     gate     │ ein einziger Required Check
+                        └──────────────┘
+```
+
+### Der `gate`-Job
+
+Alle vorgelagerten Jobs laufen darauf zusammen. Als Required Check in den
+Branch-Protection-Regeln wird **nur `gate`** eingetragen.
+
+Der Grund ist praktisch: würde man jeden einzelnen Job als Required Check führen, müsste
+die Branch-Protection jedes Mal angefasst werden, wenn ein Job dazukommt oder umbenannt
+wird. Vergisst man es, ist der neue Job zwar rot, blockiert den Merge aber nicht.
+
+`gate` prüft die Ergebnisse ausdrücklich auf `success` — nicht mit `if: failure()`. Ein
+übersprungener Job gilt sonst als bestanden.
+
+## Jobs im Einzelnen
+
+### `backend`
+
+Temurin 21, Maven-Cache über `setup-java`. Führt aus:
+
+```bash
+./mvnw -B verify
+```
+
+Damit laufen Kompilierung, Spotless-Formatprüfung, Unit-Tests und die Integrationstests
+inklusive RLS-Test. Die Tests starten Postgres über Quarkus Dev Services — Docker steht
+auf den GitHub-Runnern zur Verfügung.
+
+Testberichte werden als Artefakt hochgeladen, auch bei rotem Lauf (`if: always()`). Sonst
+steht man mit einem Fehlschlag ohne Bericht da, was den roten Lauf doppelt ärgerlich macht.
+
+### `frontend`
+
+Node 24 mit npm-Cache. Führt aus:
+
+```bash
+npm ci
+npm run lint
+npm run typecheck
+npm run test
+npm run build
+```
+
+Die Reihenfolge ist bewusst: der Build ist der teuerste Schritt und steht am Ende. Ein
+Typfehler soll nach zwanzig Sekunden auffallen, nicht nach zwei Minuten.
+
+### `stapel`
+
+Fährt `docker-compose.ci.yml` hoch — Postgres, Keycloak, Backend, Frontend — und prüft
+zwei Dinge, die sonst niemand prüft:
+
+1. **`GET /api/konten` ohne Token muss 401 liefern.** Käme hier eine 200, wäre die
+   Anmeldepflicht nicht aktiv. Das ist der schwerwiegendste denkbare
+   Konfigurationsfehler, und er fällt in keinem Unit-Test auf, weil dort OIDC
+   abgeschaltet ist.
+2. **Mit gültigem Token sieht Demo Eins genau vier Konten** — und `Giro Demo Zwei`
+   gehört nicht dazu. Das ist die harte Anforderung aus HB-05, geprüft über den ganzen
+   Stapel statt nur gegen die Datenbank.
+
+Bei Fehlschlag werden die Container-Protokolle ausgegeben. Ohne sie ist ein roter Lauf
+an dieser Stelle kaum zu deuten — der Fehler liegt meist im Zusammenspiel, nicht in
+einem einzelnen Dienst.
+
+### `images`
+
+Baut Backend- und Frontend-Image über Buildx mit GitHub-Actions-Cache. Läuft nur, wenn
+`backend` und `frontend` grün sind.
+
+**Tagging:**
+
+| Anlass | Tag |
+|---|---|
+| Pull Request | `pr-<nummer>` und `pr-<nummer>-<sha>` |
+| Push auf `main` | `main` und `main-<sha>` |
+
+Der SHA-Tag existiert, weil ein reiner `pr-42`-Tag mit jedem Push überschrieben wird. Will
+man später nachvollziehen, welches Image zu einem bestimmten Stand gehörte, braucht man
+den unveränderlichen Tag.
+
+**Bei Pull Requests aus Forks wird nicht gepusht.** Ein Fork-PR hat keinen Schreibzugriff
+auf die Registry — der Versuch würde den Lauf ohne Erkenntnisgewinn rot färben. Gebaut
+wird trotzdem, damit der Build selbst geprüft ist.
+
+## Registry
+
+GitHub Container Registry, Namensraum `ghcr.io/<eigentuemer>/mcp-haushaltsbuch`:
+
+| Image | Inhalt |
+|---|---|
+| `…/backend` | Quarkus im JVM-Modus, Temurin-21-JRE |
+| `…/frontend` | Next.js Standalone auf Node 24 Alpine |
+
+Authentifizierung über `GITHUB_TOKEN` — kein zusätzliches Geheimnis nötig. Die Berechtigung
+`packages: write` steht nur im `images`-Job, nicht am Workflow.
+
+## Keycloak in der CI
+
+Die CI bringt über `docker-compose.ci.yml` einen eigenen Keycloak mit statt gegen
+`auth.jbaconsult.com` zu laufen.
+
+Ein Pull Request, der rot wird, weil ein externer Identity-Provider gerade neu startet,
+kostet mehr Vertrauen in die Pipeline, als die Realitätsnähe wert ist. Eine Pipeline, der
+man nicht glaubt, wird ignoriert — und dann ist sie wertlos.
+
+Der Realm-Import liegt in `infra/keycloak/realm-haushaltsbuch-ci.json`, mit Testbenutzern
+und offensichtlichen Testpasswörtern. **Diese Datei ist ausschließlich für die CI** und
+darf nie Grundlage einer echten Umgebung werden.
+
+## Was die Pipeline noch nicht tut
+
+Bewusst weggelassen, damit das erste Scaffolding nicht unter seinem eigenen Gewicht
+zusammenbricht:
+
+- **SBOM und Signierung** (Syft, Trivy, cosign) — sinnvoll fürs Open-Source-Zielbild,
+  gehört aber in einen eigenen Schritt, wenn die Images stabil sind.
+- **Native-Image-Build** — mehrere Minuten pro PR für einen Nutzen, den zwei Nutzer nicht
+  spüren.
+- **Deployment** — es gibt noch keine Zielumgebung.
+- **Abhängigkeitsprüfung** (Dependabot, OWASP) — sinnvoll, sobald der Abhängigkeitsbaum
+  steht.
+
+## Lokal dasselbe prüfen
+
+```bash
+make pruefen
+```
+
+Führt dieselben Schritte aus wie `backend` und `frontend`. Wer das vor dem Commit laufen
+lässt, spart sich den Umweg über einen roten Pull Request.

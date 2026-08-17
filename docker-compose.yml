@@ -1,0 +1,73 @@
+# =============================================================================
+# Entwicklungsstack
+#
+#   cp .env.example .env    # Platzhalter ausfüllen
+#   make hoch
+#
+# OIDC läuft gegen den externen Keycloak aus OIDC_AUTH_SERVER_URL - für die
+# Entwicklung auth.jbaconsult.com, in Produktion auth.kumbuka.ai. Wer ohne
+# externen Identity-Provider arbeiten will, nimmt docker-compose.ci.yml: der
+# bringt einen eigenen Keycloak mit.
+#
+# Für die tägliche Arbeit ist der Quarkus Dev Mode angenehmer - er startet
+# Postgres selbst und lädt Änderungen ohne Neustart. Siehe make backend-dev.
+# =============================================================================
+
+name: haushaltsbuch
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-haushaltsbuch}
+      POSTGRES_USER: ${POSTGRES_USER:-haushaltsbuch_eigentuemer}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt - siehe .env.example}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-daten:/var/lib/postgresql/data
+    healthcheck:
+      # Mit -U und -d, sonst prüft pg_isready gegen die Standarddatenbank und
+      # meldet "bereit", bevor die eigentliche Datenbank angelegt ist.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-haushaltsbuch_eigentuemer} -d ${POSTGRES_DB:-haushaltsbuch}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: app/src/main/docker/Dockerfile
+    depends_on:
+      postgres:
+        # Nicht nur "started": Flyway migriert beim Anwendungsstart und scheitert
+        # gegen eine Datenbank, die noch hochfährt.
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-haushaltsbuch}
+      POSTGRES_USER: ${POSTGRES_USER:-haushaltsbuch_eigentuemer}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD fehlt - siehe .env.example}
+      OIDC_AUTH_SERVER_URL: ${OIDC_AUTH_SERVER_URL:?OIDC_AUTH_SERVER_URL fehlt - siehe .env.example}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-haushaltsbuch-backend}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?OIDC_CLIENT_SECRET fehlt - siehe .env.example}
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+
+  frontend:
+    build:
+      context: ./frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      # Docker-interner Name. Der Browser löst ihn nicht auf - er muss es auch
+      # nicht, weil er ausschliesslich mit dem BFF spricht.
+      BACKEND_BASE_URL: http://backend:8080
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+
+volumes:
+  postgres-daten:

@@ -1,0 +1,39 @@
+# --- Umgebung und Geheimnisse ---------------------------------------------
+# Niemals echte Werte ins Repo. Vorlage ist .env.example.
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.jks
+
+# --- Echte Kontodaten -----------------------------------------------------
+# Zielbild ist Open Source. Importe und Auszüge bleiben lokal.
+/daten/
+*.mt940
+*.sta
+*.camt
+*.camt.xml
+
+# --- Java / Maven ---------------------------------------------------------
+target/
+.mvn/wrapper/maven-wrapper.jar
+*.class
+*.jar
+!.mvn/wrapper/*.jar
+
+# --- Node / Next.js -------------------------------------------------------
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+.npm/
+.pnpm-store/
+
+# --- Werkzeuge ------------------------------------------------------------
+.idea/
+*.iml
+.vscode/
+.DS_Store
+*.log

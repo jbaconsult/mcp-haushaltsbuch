@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+/*
+ * Farbrollen als Token. Tailwind 4 nimmt Werte aus @theme direkt als
+ * Utility-Klassen entgegen - `bg-grund`, `text-gedaempft` und so weiter.
+ */
+@theme {
+  --color-grund: oklch(0.99 0.003 100);
+  --color-flaeche: oklch(1 0 0);
+  --color-rand: oklch(0.91 0.005 100);
+  --color-schrift: oklch(0.24 0.01 100);
+  --color-gedaempft: oklch(0.52 0.01 100);
+  --color-akzent: oklch(0.48 0.11 200);
+
+  /* Sphärenfarben. Die Trennung der drei Sphären ist bindend - sie sollte
+     auch visuell sofort erkennbar sein, nicht erst nach dem Lesen. */
+  --color-privat: oklch(0.55 0.1 240);
+  --color-freiberuflich: oklch(0.55 0.11 150);
+  --color-finanzamt: oklch(0.55 0.12 40);
+}
+
+@media (prefers-color-scheme: dark) {
+  @theme {
+    --color-grund: oklch(0.18 0.008 100);
+    --color-flaeche: oklch(0.23 0.008 100);
+    --color-rand: oklch(0.32 0.008 100);
+    --color-schrift: oklch(0.94 0.004 100);
+    --color-gedaempft: oklch(0.68 0.008 100);
+    --color-akzent: oklch(0.72 0.1 200);
+
+    --color-privat: oklch(0.72 0.1 240);
+    --color-freiberuflich: oklch(0.72 0.1 150);
+    --color-finanzamt: oklch(0.74 0.11 40);
+  }
+}
+
+body {
+  background-color: var(--color-grund);
+  color: var(--color-schrift);
+}
+
+/* Tabellenzahlen gleich breit setzen. Bei untereinander stehenden Beträgen
+   springen die Spalten sonst - und Geldbeträge stehen hier fast immer
+   untereinander. */
+.zahl {
+  font-variant-numeric: tabular-nums;
+}
