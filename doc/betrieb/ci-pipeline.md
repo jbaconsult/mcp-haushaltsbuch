@@ -14,7 +14,8 @@ niemandem und belegt nur einen Runner.
    ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
    │   backend    │  │   frontend   │  │    stapel    │   parallel
    │ Build, Test  │  │ Lint, Types, │  │ Compose mit  │
-   │ Spotless     │  │ Test, Build  │  │ Keycloak     │
+   │ Spotless,    │  │ Test, Build  │  │ Keycloak     │
+   │ SonarCloud   │  │              │  │              │
    └──────┬───────┘  └──────┬───────┘  └──────┬───────┘
           └────────┬────────┘                 │
                    ▼                          │
@@ -57,6 +58,67 @@ auf den GitHub-Runnern zur Verfügung.
 
 Testberichte werden als Artefakt hochgeladen, auch bei rotem Lauf (`if: always()`). Sonst
 steht man mit einem Fehlschlag ohne Bericht da, was den roten Lauf doppelt ärgerlich macht.
+
+#### SonarCloud
+
+Im selben Job, nach den Tests:
+
+```bash
+./mvnw -B sonar:sonar
+```
+
+**Über Maven, nicht über den CLI-Scanner.** Nur Maven weiß, wo die übersetzten Klassen und
+der Abhängigkeitspfad liegen. Fehlt beides, fällt die Java-Analyse auf Textmusterprüfung
+zurück — Sonar meldet dann *weniger*, nicht besser, und der grüne Haken bedeutet nichts.
+
+Drei Voraussetzungen, die leicht zu übersehen sind:
+
+1. **`fetch-depth: 0` beim Checkout.** Sonar unterscheidet neuen von altem Code über die
+   Git-Historie. Mit einem flachen Klon hält es alles für neu, und die Schwelle auf neuem
+   Code wird bedeutungslos.
+2. **`GITHUB_TOKEN` als Umgebungsvariable.** Ohne sie findet die Analyse die
+   Pull-Request-Nummer nicht und vergleicht gegen den falschen Bezugspunkt.
+3. **Automatische Analyse in SonarCloud muss aus sein.** SonarCloud kann entweder selbst
+   scannen oder die Ergebnisse aus der CI annehmen, nicht beides. Läuft die automatische
+   Analyse weiter, lehnt SonarCloud die CI-Analyse mit einer eindeutigen Meldung ab. Der
+   Schalter steht unter *Administration → Analysis Method*.
+
+#### Abdeckung
+
+JaCoCo, konfiguriert im Eltern-POM. Ohne Bericht meldet Sonar null Prozent auf neuem Code
+und wird rot — nicht, weil zu wenig geprüft wird, sondern weil niemand hinsieht.
+
+Zwei Berichtsquellen, und beide werden gebraucht:
+
+- **Je Modul** (`*/target/site/jacoco/jacoco.xml`) — was die Tests desselben Moduls prüfen.
+- **Über alle Module** (`app/target/jacoco-report/jacoco.xml`) — die Integrationstests
+  liegen in `app`, laufen aber durch `kern`, `persistenz`, `mcp` und `api` hindurch. In
+  keinem Modulbericht taucht das auf.
+
+Sonar liest beide und vereinigt sie: eine Zeile gilt als abgedeckt, wenn irgendein Test sie
+erreicht hat.
+
+**Die Erweiterung `quarkus-jacoco` ist nicht optional.** Hibernate und Panache verändern
+den Bytecode der Entitäten und Repositories beim Start. Die geladene Klasse stimmt dann
+nicht mehr mit der auf der Platte überein, und JaCoCo verwirft die Messung — stillschweigend,
+ohne Warnung. Gemessen: `persistenz` stand mit dem reinen Maven-Plugin auf **0 von 44
+Zeilen**, obwohl `RlsZugriffTest` genau dort hineinläuft; mit der Erweiterung sind es
+**42 von 44**. `mcp` sprang von 19 auf 30 von 33.
+
+Wer den Verdacht hat, eine Abdeckungszahl sei zu niedrig, prüfe zuerst, ob die betroffenen
+Klassen zur Laufzeit umgeschrieben werden.
+
+Die Qualitätsschwelle wird im Anschluss abgewartet und ausgewertet — in Shell, aus
+demselben Grund wie bei den Docker-Actions weiter unten. Damit fällt ein Verstoß in den
+`backend`-Job und von dort in `gate`, statt als separater Check danebenzustehen, den die
+Branch-Protection einzeln kennen müsste.
+
+**Das Frontend ist nicht Teil der Analyse.** Ein SonarCloud-Projekt trägt eine Analyse je
+Pull Request; ein zweiter Scanner-Lauf überschreibt den ersten. Das Frontend
+mitaufzunehmen heißt also, entweder beide Sprachen in einem Scanner-Lauf am
+Projektwurzelverzeichnis zu behandeln — womit die Java-Analyse ihren Abhängigkeitspfad
+verliert — oder ein zweites SonarCloud-Projekt anzulegen. Das ist eine Entscheidung und
+kein Versäumnis; sie steht noch aus.
 
 ### `frontend`
 

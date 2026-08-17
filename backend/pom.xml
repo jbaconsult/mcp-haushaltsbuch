@@ -44,8 +44,39 @@
         <failsafe-plugin.version>3.5.4</failsafe-plugin.version>
         <jandex-plugin.version>3.6.0</jandex-plugin.version>
         <spotless-plugin.version>3.10.0</spotless-plugin.version>
+        <jacoco-plugin.version>0.8.13</jacoco-plugin.version>
+        <sonar-plugin.version>5.2.0.4988</sonar-plugin.version>
 
         <skipITs>false</skipITs>
+
+        <!-- SonarCloud.
+             Die Analyse läuft über das Maven-Plugin und nicht über den
+             CLI-Scanner, weil nur Maven weiß, wo die übersetzten Klassen und der
+             Abhängigkeitspfad liegen. Ohne beides fällt die Java-Analyse auf
+             Textmusterprüfung zurück: Sonar meldet dann weniger, nicht besser.
+
+             Der Analysebereich ist bewusst das Backend. Das Frontend braucht eine
+             eigene Entscheidung - siehe doc/betrieb/ci-pipeline.md. -->
+        <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+        <sonar.organization>jbaconsult</sonar.organization>
+        <sonar.projectKey>jbaconsult_mcp-haushaltsbuch</sonar.projectKey>
+
+        <!-- Zwei Quellen, und beide werden gebraucht.
+
+             Der Bericht je Modul deckt ab, was die Tests desselben Moduls prüfen.
+             Er allein genügt nicht: die Integrationstests liegen in "app" und
+             laufen durch "kern", "persistenz", "mcp" und "api" hindurch. Diese
+             Abdeckung taucht in keinem Modulbericht auf - "persistenz" stünde auf
+             null Prozent, obwohl RlsZugriffTest genau dort hineinläuft.
+
+             Deshalb zusätzlich der Bericht der quarkus-jacoco-Erweiterung aus
+             "app", der über alle beteiligten Module geht. Sonar liest beide und
+             vereinigt sie; eine Zeile gilt als abgedeckt, wenn irgendein Test sie
+             erreicht hat. -->
+        <sonar.coverage.jacoco.xmlReportPaths>
+            ${maven.multiModuleProjectDirectory}/*/target/site/jacoco/jacoco.xml,
+            ${maven.multiModuleProjectDirectory}/app/target/jacoco-report/jacoco.xml
+        </sonar.coverage.jacoco.xmlReportPaths>
     </properties>
 
     <dependencyManagement>
@@ -133,10 +164,43 @@
                         </execution>
                     </executions>
                 </plugin>
+                <plugin>
+                    <groupId>org.sonarsource.scanner.maven</groupId>
+                    <artifactId>sonar-maven-plugin</artifactId>
+                    <version>${sonar-plugin.version}</version>
+                </plugin>
             </plugins>
         </pluginManagement>
 
         <plugins>
+            <!-- Abdeckung messen, damit die Sonar-Qualitätsschwelle über echte
+                 Zahlen entscheidet. Ohne Bericht meldet Sonar 0 Prozent auf neuem
+                 Code und wird rot - nicht, weil zu wenig geprüft wird, sondern
+                 weil niemand hinsieht.
+
+                 Der Agent hängt sich an "argLine". Surefire setzt hier nur
+                 systemPropertyVariables, es gibt also nichts zu überschreiben. -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>${jacoco-plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>abdeckung-messen</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>abdeckung-berichten</id>
+                        <phase>verify</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>
