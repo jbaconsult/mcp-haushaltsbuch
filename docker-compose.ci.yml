@@ -84,13 +84,40 @@ services:
       OIDC_AUTH_SERVER_URL: http://keycloak:8080/realms/haushaltsbuch
       OIDC_CLIENT_ID: haushaltsbuch-backend
       OIDC_CLIENT_SECRET: ci-geheimnis-backend
-
-      # Synthetischer Demo-Datensatz auch im Produktionsprofil. Er enthält die
-      # Zuordnung der Keycloak-Benutzerkennungen auf die fachlichen Benutzer -
-      # ohne sie könnte sich zwar jemand anmelden, sähe aber nichts.
-      QUARKUS_FLYWAY_LOCATIONS: db/migration,db/demodaten
     ports:
       - "8080:8080"
+
+  # Spielt den synthetischen Demo-Datensatz ein. Ohne ihn fehlt die Zuordnung
+  # der Keycloak-Benutzerkennungen auf die fachlichen Benutzer, und wer sich
+  # anmeldet, sieht nichts - fail-closed, wie vorgesehen.
+  #
+  # Warum ein eigener Dienst und nicht einfach QUARKUS_FLYWAY_LOCATIONS:
+  # quarkus.flyway.locations ist eine BUILD-ZEIT-Property. Eine
+  # Umgebungsvariable ändert sie nicht; Quarkus meldet beim Start lediglich
+  # "build time fixed to 'db/migration'" und macht weiter. Der Demo-Datensatz
+  # bliebe stillschweigend aus.
+  #
+  # Der eigene Dienst hat einen zweiten Vorteil: das Produktionsimage kennt
+  # keine Demodaten. Sie können nicht versehentlich in eine echte Umgebung
+  # geraten.
+  #
+  # Läuft über "profiles" nicht bei "docker compose up" mit, sondern nur auf
+  # ausdrücklichen Aufruf:
+  #   docker compose -f docker-compose.ci.yml run --rm demodaten
+  demodaten:
+    image: postgres:18-alpine
+    profiles: ["werkzeug"]
+    depends_on:
+      backend:
+        # Erst wenn das Backend gesund ist, sind die Tabellen aus V1 da.
+        condition: service_healthy
+    environment:
+      PGPASSWORD: ci-passwort
+    volumes:
+      - ./backend/persistenz/src/main/resources/db/demodaten:/demodaten:ro
+    command: >
+      psql -h postgres -U haushaltsbuch_eigentuemer -d haushaltsbuch
+           -v ON_ERROR_STOP=1 -f /demodaten/V900__demodaten.sql
 
   frontend:
     build:

@@ -141,6 +141,12 @@ jobs:
       - name: Stapel starten
         run: docker compose -f docker-compose.ci.yml up -d --build --wait --wait-timeout 420
 
+      # Eigener Schritt, weil quarkus.flyway.locations eine Build-Zeit-Property
+      # ist und sich nicht per Umgebungsvariable umstellen lässt. Näheres in
+      # docker-compose.ci.yml.
+      - name: Demodaten laden
+        run: docker compose -f docker-compose.ci.yml run --rm demodaten
+
       # Ohne gültiges Token muss das Backend abweisen. Käme hier eine 200,
       # wäre die Anmeldepflicht nicht aktiv - und das wäre der schwerwiegendste
       # denkbare Konfigurationsfehler.
@@ -225,6 +231,11 @@ jobs:
 
     strategy:
       fail-fast: false
+      # Nacheinander statt gleichzeitig: laufen beide Jobs parallel, laden sie
+      # im selben Moment dieselben Actions von codeload.github.com und liefen
+      # wiederholt in ein HTTP 429. Einer gewann, der andere fiel um. Die
+      # Image-Builds sind cache-gestützt, die zusätzliche Wartezeit ist gering.
+      max-parallel: 1
       matrix:
         include:
           - name: backend

@@ -75,8 +75,8 @@ Typfehler soll nach zwanzig Sekunden auffallen, nicht nach zwei Minuten.
 
 ### `stapel`
 
-Fährt `docker-compose.ci.yml` hoch — Postgres, Keycloak, Backend, Frontend — und prüft
-zwei Dinge, die sonst niemand prüft:
+Fährt `docker-compose.ci.yml` hoch — Postgres, Keycloak, Backend, Frontend —, lädt den
+Demo-Datensatz und prüft dann zwei Dinge, die sonst niemand prüft:
 
 1. **`GET /api/konten` ohne Token muss 401 liefern.** Käme hier eine 200, wäre die
    Anmeldepflicht nicht aktiv. Das ist der schwerwiegendste denkbare
@@ -86,9 +86,33 @@ zwei Dinge, die sonst niemand prüft:
    gehört nicht dazu. Das ist die harte Anforderung aus HB-05, geprüft über den ganzen
    Stapel statt nur gegen die Datenbank.
 
-Bei Fehlschlag werden die Container-Protokolle ausgegeben. Ohne sie ist ein roter Lauf
-an dieser Stelle kaum zu deuten — der Fehler liegt meist im Zusammenspiel, nicht in
-einem einzelnen Dienst.
+Bei Fehlschlag werden Containerzustand, **Health-Historie** und Protokolle ausgegeben.
+Ohne sie ist ein roter Lauf hier kaum zu deuten: `container X is unhealthy` nennt weder
+den geprüften Befehl noch dessen Ausgabe — die steht in `docker inspect`.
+
+### Warum die Demodaten ein eigener Schritt sind
+
+Naheliegend wäre gewesen, sie über `QUARKUS_FLYWAY_LOCATIONS` im Compose einzuschalten.
+Das funktioniert **nicht**: `quarkus.flyway.locations` ist eine Build-Zeit-Property. Eine
+Umgebungsvariable ändert sie nicht — Quarkus meldet beim Start lediglich
+
+```
+quarkus.flyway.locations is set to 'db/migration,db/demodaten'
+but it is build time fixed to 'db/migration'.
+```
+
+und macht weiter. Der Demo-Datensatz bliebe stillschweigend aus, die Zuordnung der
+Keycloak-Kennungen auf die fachlichen Benutzer fehlte, und jede Anmeldung sähe null
+Konten — fail-closed, aber aus dem falschen Grund.
+
+Deshalb lädt ein eigener Compose-Dienst sie per `psql`:
+
+```bash
+docker compose -f docker-compose.ci.yml run --rm demodaten
+```
+
+Das hat einen zweiten Vorteil: das Produktionsimage kennt keine Demodaten und kann sie
+nicht versehentlich in eine echte Umgebung tragen.
 
 ### `images`
 

@@ -23,7 +23,8 @@ hoch: ## Entwicklungsstack starten (OIDC extern)
 
 .PHONY: hoch-ci
 hoch-ci: ## Vollständigen Stack mit eigenem Keycloak starten
-	docker compose -f docker-compose.ci.yml up -d --build
+	docker compose -f docker-compose.ci.yml up -d --build --wait
+	docker compose -f docker-compose.ci.yml run --rm demodaten
 
 .PHONY: runter
 runter: ## Stack stoppen

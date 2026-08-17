@@ -10,11 +10,21 @@
 -- Historie.
 --
 -- Feste UUIDs, damit Tests dagegen schreiben koennen, ohne sie erst zu suchen.
+--
+-- Zwei Wege fuehren hierher:
+--   Dev Mode und Tests  Flyway, ueber quarkus.flyway.locations
+--   CI-Stapel           psql, ueber den Compose-Service "demodaten"
+--
+-- Der zweite Weg ist noetig, weil quarkus.flyway.locations eine BUILD-ZEIT-
+-- Property ist: eine Umgebungsvariable zur Laufzeit aendert sie nicht, Quarkus
+-- meldet lediglich "build time fixed to ..." und macht weiter. Deshalb sind
+-- alle INSERTs hier idempotent - dieses Skript kann mehrfach laufen.
 -- =============================================================================
 
 INSERT INTO benutzer (id, anzeigename) VALUES
     ('00000000-0000-0000-0000-000000000001', 'Demo Eins'),
-    ('00000000-0000-0000-0000-000000000002', 'Demo Zwei');
+    ('00000000-0000-0000-0000-000000000002', 'Demo Zwei')
+ON CONFLICT DO NOTHING;
 
 INSERT INTO benutzeridentitaet (oidc_subjekt, benutzer_id) VALUES
     -- Dev Mode und Tests: dort laeuft die Anwendung ohne OIDC, das Subjekt kommt
@@ -25,7 +35,8 @@ INSERT INTO benutzeridentitaet (oidc_subjekt, benutzer_id) VALUES
     -- infra/keycloak/realm-haushaltsbuch-ci.json. Die IDs sind dort fest
     -- vergeben, damit diese Zuordnung ueberhaupt vorab schreibbar ist.
     ('aaaaaaaa-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001'),
-    ('aaaaaaaa-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000002');
+    ('aaaaaaaa-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000002')
+ON CONFLICT DO NOTHING;
 
 INSERT INTO konto (id, bezeichnung, art, sphaere) VALUES
     ('10000000-0000-0000-0000-000000000001', 'Haushalt gemeinsam',  'HAUSHALTSKONTO',  'PRIVAT'),
@@ -34,7 +45,8 @@ INSERT INTO konto (id, bezeichnung, art, sphaere) VALUES
     ('10000000-0000-0000-0000-000000000004', 'Ruecklage',           'RUECKLAGENKONTO', 'PRIVAT'),
     -- Gehoert ausschliesslich Demo Zwei. Der Nachweis, dass die Zugriffskontrolle
     -- greift, haengt an genau diesem Konto: Demo Eins darf es nicht sehen.
-    ('10000000-0000-0000-0000-000000000005', 'Giro Demo Zwei',      'GIROKONTO',       'PRIVAT');
+    ('10000000-0000-0000-0000-000000000005', 'Giro Demo Zwei',      'GIROKONTO',       'PRIVAT')
+ON CONFLICT DO NOTHING;
 
 INSERT INTO kontozugriff (benutzer_id, konto_id, recht) VALUES
     -- Demo Eins: gemeinsames Konto plus eigene Konten
@@ -45,4 +57,5 @@ INSERT INTO kontozugriff (benutzer_id, konto_id, recht) VALUES
     -- Demo Zwei: gemeinsames Konto nur lesend, eigenes Konto schreibend.
     -- Das bildet den Fall ab, um den es geht - mitsehen duerfen, ohne alles zu sehen.
     ('00000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', 'LESEN'),
-    ('00000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000005', 'SCHREIBEN');
+    ('00000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000005', 'SCHREIBEN')
+ON CONFLICT DO NOTHING;
