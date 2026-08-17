@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>de.jbaconsult.haushaltsbuch</groupId>
+        <artifactId>haushaltsbuch-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>mcp</artifactId>
+    <name>Haushaltsbuch :: MCP</name>
+    <description>
+        MCP-Tooloberfläche. Laut HB-05 die primäre Schnittstelle des Systems und damit ein
+        erstklassiges Design-Artefakt - kein Adapter, der am Ende angeschraubt wird.
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>de.jbaconsult.haushaltsbuch</groupId>
+            <artifactId>kern</artifactId>
+        </dependency>
+
+        <!-- Bringt beide HTTP-Transporte mit: Streamable HTTP (der aktuelle MCP-Standard)
+             unter /mcp und SSE unter /mcp/sse. Das frueher separate Artefakt
+             quarkus-mcp-server-sse ist nur noch eine Weiterleitung hierher. -->
+        <dependency>
+            <groupId>io.quarkiverse.mcp</groupId>
+            <artifactId>quarkus-mcp-server-http</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-security</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>io.smallrye</groupId>
+                <artifactId>jandex-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>de.jbaconsult.haushaltsbuch</groupId>
+        <artifactId>haushaltsbuch-parent</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>kern</artifactId>
+    <name>Haushaltsbuch :: Kern</name>
+    <description>Domäne und Berechnungslogik. Frameworkfrei.</description>
+
+    <dependencies>
+        <!-- CDI-Annotationen, damit Domain-Services als Beans nutzbar sind. Das ist die
+             einzige zulässige Framework-Abhängigkeit in diesem Modul: keine Quarkus-
+             Laufzeit, kein JPA, kein Jackson. Wer hier einen weiteren Framework-Import
+             ergänzt, hat die Schichtung gebrochen. -->
+        <dependency>
+            <groupId>jakarta.enterprise</groupId>
+            <artifactId>jakarta.enterprise.cdi-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-junit</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>io.smallrye</groupId>
+                <artifactId>jandex-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>
