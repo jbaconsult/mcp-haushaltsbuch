@@ -84,7 +84,18 @@ jobs:
           # Ohne dieses Token findet Sonar die Pull-Request-Nummer nicht und
           # analysiert gegen den falschen Bezugspunkt.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./mvnw -B sonar:sonar
+        # Der haeufigste Fehlschlag hier hat eine Ursache ausserhalb des Repos und
+        # eine Meldung, die zwischen zweihundert Maven-Zeilen untergeht. Deshalb
+        # wird sie herausgefischt und als Annotation wiederholt - sonst sucht der
+        # Naechste sie noch einmal.
+        run: |
+          set -o pipefail
+          if ! ./mvnw -B sonar:sonar 2>&1 | tee sonar.log; then
+            if grep -q "Automatic Analysis is enabled" sonar.log; then
+              echo "::error::In SonarCloud laeuft noch die automatische Analyse. Beides gleichzeitig geht nicht - abschalten unter Administration -> Analysis Method, dann diesen Lauf wiederholen."
+            fi
+            exit 1
+          fi
 
       # Bewusst in Shell statt über sonarqube-quality-gate-action: dieselbe
       # Begründung wie bei den Docker-Actions weiter unten - eine Action, die
