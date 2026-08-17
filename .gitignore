@@ -15,6 +15,20 @@
 *.camt
 *.camt.xml
 
+# Ausnahme: die synthetischen Fixtures der Parser-Tests. Sie tragen dieselben
+# Endungen wie echte Auszüge, weil sie dieselben Formate SIND — die Regel oben
+# greift also auch auf sie, und zwar lautlos: "git add" überspringt sie, "git
+# status" zeigt nur das Verzeichnis, und lokal läuft alles grün, weil die Dateien
+# auf der Platte liegen. Erst die CI mit frischem Checkout merkt es.
+#
+# Die Grenze ist der Pfad. Unterhalb von src/test/resources/ steht ausschließlich
+# Erfundenes — siehe CLAUDE.md, Abschnitt "Testdaten". Ein echter Auszug bleibt
+# überall sonst ignoriert, auch im Projektwurzelverzeichnis.
+!backend/*/src/test/resources/**/*.mt940
+!backend/*/src/test/resources/**/*.sta
+!backend/*/src/test/resources/**/*.camt
+!backend/*/src/test/resources/**/*.camt.xml
+
 # --- Java / Maven ---------------------------------------------------------
 target/
 .mvn/wrapper/maven-wrapper.jar
