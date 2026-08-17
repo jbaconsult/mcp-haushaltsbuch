@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.052.001.02">
+  <BkToCstmrAcctRpt>
+    <GrpHdr>
+      <MsgId>DEMO-CAMT-0001</MsgId>
+      <CreDtTm>2026-08-31T23:59:00</CreDtTm>
+    </GrpHdr>
+    <Rpt>
+      <Id>DEMO-REPORT-2026-08</Id>
+      <ElctrncSeqNb>8</ElctrncSeqNb>
+      <CreDtTm>2026-08-31T23:59:00</CreDtTm>
+      <Acct>
+        <Id><IBAN>DE04500500500000334455</IBAN></Id>
+        <Ccy>EUR</Ccy>
+      </Acct>
+      <Bal>
+        <Tp><CdOrPrtry><Cd>OPBD</Cd></CdOrPrtry></Tp>
+        <Amt Ccy="EUR">2000.00</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <Dt><Dt>2026-08-01</Dt></Dt>
+      </Bal>
+      <Bal>
+        <Tp><CdOrPrtry><Cd>CLBD</Cd></CdOrPrtry></Tp>
+        <Amt Ccy="EUR">2430.50</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <Dt><Dt>2026-08-31</Dt></Dt>
+      </Bal>
+
+      <Ntry>
+        <Amt Ccy="EUR">119.50</Amt>
+        <CdtDbtInd>DBIT</CdtDbtInd>
+        <RvslInd>false</RvslInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-08-12</Dt></BookgDt>
+        <ValDt><Dt>2026-08-12</Dt></ValDt>
+        <AcctSvcrRef>CAMTREF00000001</AcctSvcrRef>
+        <NtryDtls>
+          <TxDtls>
+            <Refs>
+              <EndToEndId>E2E-2026-08-12-0001</EndToEndId>
+              <MndtId>MND-000998877</MndtId>
+            </Refs>
+            <RltdPties>
+              <Cdtr>
+                <Nm>Beispiel Strom AG</Nm>
+                <Id>
+                  <PrvtId>
+                    <Othr>
+                      <Id>DE77ZZZ00000111222</Id>
+                      <SchmeNm><Prtry>SEPA</Prtry></SchmeNm>
+                    </Othr>
+                  </PrvtId>
+                </Id>
+              </Cdtr>
+              <CdtrAcct><Id><IBAN>DE25100100100000765432</IBAN></Id></CdtrAcct>
+            </RltdPties>
+            <RmtInf><Ustrd>Abschlag Strom August 2026</Ustrd></RmtInf>
+          </TxDtls>
+        </NtryDtls>
+        <AddtlNtryInf>SEPA-LASTSCHRIFT</AddtlNtryInf>
+      </Ntry>
+
+      <Ntry>
+        <Amt Ccy="EUR">500.00</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <RvslInd>false</RvslInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-08-20</Dt></BookgDt>
+        <ValDt><Dt>2026-08-20</Dt></ValDt>
+        <AcctSvcrRef>CAMTREF00000002</AcctSvcrRef>
+        <NtryDtls>
+          <TxDtls>
+            <Refs>
+              <EndToEndId>E2E-2026-08-20-0002</EndToEndId>
+            </Refs>
+            <RltdPties>
+              <Dbtr><Nm>Beispiel Auftraggeber</Nm></Dbtr>
+              <DbtrAcct><Id><IBAN>DE79200200200000112233</IBAN></Id></DbtrAcct>
+            </RltdPties>
+            <RmtInf><Ustrd>Honorar August 2026</Ustrd></RmtInf>
+          </TxDtls>
+        </NtryDtls>
+        <AddtlNtryInf>GUTSCHRIFT</AddtlNtryInf>
+      </Ntry>
+
+      <Ntry>
+        <Amt Ccy="EUR">50.00</Amt>
+        <CdtDbtInd>CRDT</CdtDbtInd>
+        <RvslInd>true</RvslInd>
+        <Sts>BOOK</Sts>
+        <BookgDt><Dt>2026-08-25</Dt></BookgDt>
+        <ValDt><Dt>2026-08-25</Dt></ValDt>
+        <AcctSvcrRef>CAMTREF00000003</AcctSvcrRef>
+        <NtryDtls>
+          <TxDtls>
+            <Refs>
+              <EndToEndId>E2E-2026-08-25-0003</EndToEndId>
+              <MndtId>MND-000445566</MndtId>
+            </Refs>
+            <RltdPties>
+              <Cdtr>
+                <Nm>Beispiel Handel</Nm>
+                <Id>
+                  <PrvtId>
+                    <Othr>
+                      <Id>DE22ZZZ00000333444</Id>
+                      <SchmeNm><Prtry>SEPA</Prtry></SchmeNm>
+                    </Othr>
+                  </PrvtId>
+                </Id>
+              </Cdtr>
+              <CdtrAcct><Id><IBAN>DE66300300300000445566</IBAN></Id></CdtrAcct>
+            </RltdPties>
+            <RmtInf><Ustrd>Storno Lastschrift</Ustrd></RmtInf>
+          </TxDtls>
+        </NtryDtls>
+        <AddtlNtryInf>STORNO LASTSCHRIFT</AddtlNtryInf>
+      </Ntry>
+    </Rpt>
+  </BkToCstmrAcctRpt>
+</Document>
