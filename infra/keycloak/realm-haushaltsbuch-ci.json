@@ -1,17 +1,4 @@
 {
-  "_kommentar": [
-    "Realm-Import AUSSCHLIESSLICH fuer die CI und fuer lokale Arbeit ohne externen",
-    "Identity-Provider. Die Passwoerter sind offensichtliche Testwerte und sollen es",
-    "auch bleiben - diese Datei darf nie Grundlage einer echten Umgebung werden.",
-    "",
-    "Die Benutzerkennungen sind fest vergeben, weil das OIDC-Subjekt genau diese",
-    "Kennung ist. Nur so laesst sich die Zuordnung in V900__demodaten.sql vorab",
-    "schreiben; bei zufaellig erzeugten Kennungen waere sie erst nach dem Start",
-    "bekannt.",
-    "",
-    "Produktion laeuft gegen auth.kumbuka.ai, Entwicklung gegen auth.jbaconsult.com."
-  ],
-
   "realm": "haushaltsbuch",
   "enabled": true,
   "displayName": "Haushaltsbuch (CI)",
@@ -27,10 +14,10 @@
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,
-      "bearerOnly": true,
       "secret": "ci-geheimnis-backend",
       "standardFlowEnabled": false,
-      "directAccessGrantsEnabled": false
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false
     },
     {
       "clientId": "haushaltsbuch-bff",
@@ -40,10 +27,6 @@
       "publicClient": false,
       "secret": "ci-geheimnis-bff",
       "standardFlowEnabled": true,
-      "_kommentar_direct_access": [
-        "Direct Access Grants ist in der CI eingeschaltet, damit ein Testlauf ohne",
-        "Browser an ein Token kommt. In einer echten Umgebung gehoert das aus."
-      ],
       "directAccessGrantsEnabled": true,
       "redirectUris": ["http://localhost:3000/*", "http://frontend:3000/*"],
       "webOrigins": ["http://localhost:3000"]
