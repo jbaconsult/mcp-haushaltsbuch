@@ -253,6 +253,35 @@ ausdrücklich nicht gibt.
 **Der Tag wird streng geprüft, nicht wohlwollend geraten.** `v1.2` oder `release-3` lassen
 den Lauf scheitern, statt ein sonderbar benanntes Image abzulegen.
 
+### Die Version, die die Anwendung meldet
+
+Der Tag ist die **einzige** Quelle. Er wird als Build-Arg `HB_VERSION` in beide Images
+gereicht, dort zur Umgebungsvariablen, und die Anwendung liest sie zur Laufzeit:
+
+| Ort | Wert bei `v0.2.0` |
+|---|---|
+| MCP-Server-Info (`serverInfo.version`) | `0.2.0` |
+| OpenAPI (`info.version`) | `0.2.0` |
+| Fußzeile des Dashboards | `0.2.0` |
+| OCI-Label `image.version` | `0.2.0` |
+
+Bei einem Lauf ohne Tag steht dort stattdessen `main-f49bcae` beziehungsweise `pr-42-…` —
+das Image benennt damit genau, was es ist, statt eine Release-Nummer vorzutäuschen. Wer ein
+Image lokal von Hand baut, bekommt `dev`.
+
+**`pom.xml` und `package.json` bleiben davon unberührt** und stehen weiter auf
+`0.1.0-SNAPSHOT` beziehungsweise `0.1.0`. Das ist Absicht: Das einzige Artefakt dieses
+Projekts ist ein Container-Image, es gibt keine Maven-Central-Veröffentlichung und kein
+npm-Paket. Eine Versionszahl im Quelltext, die niemand konsumiert, wäre eine zweite
+Wahrheit — und die wird beim Release vergessen. Genau das war hier bereits der Fall: In
+`application.properties` stand fest verdrahtet `0.1.0`, und kein Vorgang hätte den Wert je
+nachgezogen.
+
+Dass die beiden Quarkus-Eigenschaften zur Laufzeit überhaupt greifen, ist **gemessen**
+worden und keine Annahme. Wären sie wie `quarkus.flyway.locations` zur Bauzeit fixiert,
+müsste die Version beim Maven-Aufruf im Dockerfile gesetzt werden — mit allen Folgen für
+den Cache.
+
 ### Warum die Prüfungen nicht noch einmal laufen
 
 Ein Tag zeigt auf einen Commit, der den Weg über `main` genommen hat und dort vollständig

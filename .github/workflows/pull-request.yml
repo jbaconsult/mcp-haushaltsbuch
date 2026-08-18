@@ -379,6 +379,10 @@ jobs:
             echo "$basis"
             echo "${basis}-${GITHUB_SHA::7}"
             echo "ENDE"
+            # Dieselbe Zeichenkette dient als gemeldete Version. Ein Image aus
+            # diesem Weg traegt keine Release-Nummer und soll auch keine
+            # vortaeuschen - "main-f49bcae" sagt genau, was es ist.
+            echo "version=${basis}-${GITHUB_SHA::7}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Bauen und ablegen
@@ -390,6 +394,7 @@ jobs:
           tags: ${{ steps.tags.outputs.wert }}
           pushen: ${{ steps.pushbar.outputs.wert }}
           token: ${{ secrets.GITHUB_TOKEN }}
+          version: ${{ steps.tags.outputs.version }}
 
   # ---------------------------------------------------------------------------
   gate:

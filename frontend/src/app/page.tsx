@@ -79,8 +79,19 @@ export default async function Startseite() {
         )}
       </section>
 
-      <footer className="mt-16 border-t border-rand pt-6 text-sm text-gedaempft">
-        Die primäre Schnittstelle ist der MCP-Endpunkt unter <code>/mcp</code>.
+      <footer className="mt-16 flex flex-wrap items-baseline justify-between gap-2 border-t border-rand pt-6 text-sm text-gedaempft">
+        <span>
+          Die primäre Schnittstelle ist der MCP-Endpunkt unter <code>/mcp</code>.
+        </span>
+        {/*
+          Die Version kommt aus der Umgebung des Containers, nicht aus
+          package.json. Gesetzt wird sie beim Release-Build aus dem Git-Tag;
+          lokal steht hier "dev", und das ist ehrlicher als eine Zahl, die
+          niemand nachzieht.
+        */}
+        <span className="tabular-nums" title="Version dieses Dashboards">
+          {process.env.HB_VERSION ?? "dev"}
+        </span>
       </footer>
     </main>
   );
