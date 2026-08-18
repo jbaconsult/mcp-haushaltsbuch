@@ -127,5 +127,21 @@ services:
         condition: service_healthy
     environment:
       BACKEND_BASE_URL: http://backend:8080
+
+      # Zwei Adressen fuer denselben Keycloak, und das ist kein Versehen: der
+      # Container erreicht ihn unter keycloak:8080, der Browser auf dem Rechner
+      # unter localhost:8081. Ohne die zweite Angabe leitet die Anmeldung den
+      # Browser auf einen Namen, den nur Container aufloesen koennen, und endet
+      # in "Server nicht gefunden". Tokentausch, Auffrischung, Abmeldung und der
+      # Aussteller-Vergleich laufen weiter ueber die interne Adresse.
+      OIDC_AUTH_SERVER_URL: http://keycloak:8080/realms/haushaltsbuch
+      OIDC_BROWSER_URL: http://localhost:8081/realms/haushaltsbuch
+
+      BFF_CLIENT_ID: haushaltsbuch-bff
+      BFF_CLIENT_SECRET: ci-geheimnis-bff
+      # Offener Testwert wie alle Zugangsdaten dieser Datei. In Produktion:
+      # openssl rand -base64 32
+      BFF_SESSION_SECRET: ci-sitzungsgeheimnis-nicht-fuer-den-betrieb
+      BFF_BASIS_URL: http://localhost:3000
     ports:
       - "3000:3000"

@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { backendHolen } from "@/lib/bank-server";
+import { backendHolen } from "@/lib/backend-server";
 import {
   SALDENART_BESCHRIFTUNG,
   betragAnzeigen,

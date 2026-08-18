@@ -1,9 +1,8 @@
-import {
-  KONTOART_BESCHRIFTUNG,
-  SPHAERE_BESCHRIFTUNG,
-  backendUrl,
-  type Konto,
-} from "@/lib/backend";
+import { KONTOART_BESCHRIFTUNG, SPHAERE_BESCHRIFTUNG, type Konto } from "@/lib/backend";
+import { anmeldezustand } from "@/lib/anmeldung";
+import { backendHolen } from "@/lib/backend-server";
+
+import { Anmeldeleiste, Zuordnungshinweis } from "./Anmeldeleiste";
 
 /**
  * Kontoübersicht.
@@ -11,6 +10,11 @@ import {
  * Server Component: sie ruft das Backend serverseitig auf, nicht über den BFF.
  * Der BFF ist für Anfragen aus dem Browser da; von hier aus wäre er ein Umweg
  * über die eigene Adresse.
+ *
+ * Der Aufruf geht über `backendHolen` und nicht über ein blankes `fetch`: nur so
+ * wird das Zugriffstoken der Sitzung angehängt. Ohne diesen Schritt liefe die
+ * Seite im Entwicklungsprofil durch - dort arbeitet das Backend ohne OIDC - und
+ * in Produktion in ein 401.
  */
 
 const SPHAERENFARBE: Record<Konto["sphaere"], string> = {
@@ -19,21 +23,11 @@ const SPHAERENFARBE: Record<Konto["sphaere"], string> = {
   FINANZAMT: "text-finanzamt",
 };
 
-async function kontenLaden(): Promise<{ konten: Konto[]; fehler: string | null }> {
-  try {
-    const antwort = await fetch(backendUrl(["konten"]), { cache: "no-store" });
-
-    if (!antwort.ok) {
-      return { konten: [], fehler: `Backend antwortete mit ${antwort.status}` };
-    }
-    return { konten: (await antwort.json()) as Konto[], fehler: null };
-  } catch {
-    return { konten: [], fehler: "Backend nicht erreichbar" };
-  }
-}
-
 export default async function Startseite() {
-  const { konten, fehler } = await kontenLaden();
+  const [{ daten: konten, fehler }, zustand] = await Promise.all([
+    backendHolen<Konto[]>(["konten"]),
+    anmeldezustand(),
+  ]);
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-16">
@@ -42,10 +36,15 @@ export default async function Startseite() {
         <p className="mt-2 text-gedaempft">
           Übersicht für beide. Die eigentliche Arbeit passiert im Gespräch.
         </p>
-        <a href="/bank" className="mt-4 inline-block text-sm text-akzent hover:underline">
-          Bankzugänge und abgerufene Salden →
-        </a>
+        <div className="mt-4 flex items-center justify-between gap-4">
+          <a href="/bank" className="text-sm text-akzent hover:underline">
+            Bankzugänge und abgerufene Salden →
+          </a>
+          <Anmeldeleiste zustand={zustand} />
+        </div>
       </header>
+
+      <Zuordnungshinweis zustand={zustand} />
 
       <section>
         <h2 className="mb-4 text-sm font-medium uppercase tracking-wider text-gedaempft">
@@ -57,10 +56,11 @@ export default async function Startseite() {
             {fehler}. Läuft das Backend? <code className="text-akzent">make hoch</code> startet
             den Stapel.
           </Hinweis>
-        ) : konten.length === 0 ? (
+        ) : !konten || konten.length === 0 ? (
           <Hinweis>
-            Keine Konten sichtbar. Das heißt nicht, dass keine existieren — ohne angemeldeten
-            Benutzer gibt die Zugriffskontrolle nichts heraus.
+            {zustand.angemeldet && zustand.zugeordnet
+              ? "Keine Konten angelegt."
+              : "Keine Konten sichtbar. Das heißt nicht, dass keine existieren — ohne angemeldeten und zugeordneten Benutzer gibt die Zugriffskontrolle nichts heraus."}
           </Hinweis>
         ) : (
           <ul className="divide-y divide-rand overflow-hidden rounded-lg border border-rand bg-flaeche">
