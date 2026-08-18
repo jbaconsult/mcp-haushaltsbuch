@@ -155,6 +155,9 @@ public class BankzugangResource {
      */
     @POST
     @Path("/{id}/abrufen")
+    // Ohne Rumpf und deshalb ohne Erwartung an den Content-Type. Das Klassen-@Consumes wuerde
+    // sonst einen verlangen und mit 415 antworten - auf einen Aufruf, der gar nichts sendet.
+    @Consumes(MediaType.WILDCARD)
     public BankzugangDto abrufen(@PathParam("id") String id) {
         Bankzugang zugang = bankzugangService.abrufen(BankzugangId.von(id));
         return BankzugangDto.von(zugang, Instant.now());
@@ -197,6 +200,7 @@ public class BankzugangResource {
      */
     @POST
     @Path("/konten/{id}/feldabdeckung")
+    @Consumes(MediaType.WILDCARD)
     public FeldabdeckungDto feldabdeckung(@PathParam("id") String id) {
         return FeldabdeckungDto.von(bankzugangService.feldabdeckungMessen(ExternesKontoId.von(id)));
     }

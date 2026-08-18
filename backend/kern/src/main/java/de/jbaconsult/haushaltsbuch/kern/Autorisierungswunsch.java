@@ -23,6 +23,6 @@ public record Autorisierungswunsch(
         Objects.requireNonNull(gueltigBis, "gueltigBis darf nicht null sein");
         Objects.requireNonNull(rueckleitung, "rueckleitung darf nicht null sein");
         Objects.requireNonNull(zustand, "zustand darf nicht null sein");
-        ipAdresse = ipAdresse == null ? Optional.empty() : ipAdresse;
+        Objects.requireNonNull(ipAdresse, "ipAdresse darf nicht null sein - Optional.empty() statt null");
     }
 }

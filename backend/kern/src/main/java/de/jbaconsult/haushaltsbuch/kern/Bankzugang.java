@@ -43,9 +43,9 @@ public record Bankzugang(
         Objects.requireNonNull(status, "status darf nicht null sein");
         Objects.requireNonNull(angelegtVon, "angelegtVon darf nicht null sein");
         Objects.requireNonNull(angelegtAm, "angelegtAm darf nicht null sein");
-        gueltigBis = gueltigBis == null ? Optional.empty() : gueltigBis;
-        sitzung = sitzung == null ? Optional.empty() : sitzung;
-        fehlermeldung = fehlermeldung == null ? Optional.empty() : fehlermeldung;
+        Objects.requireNonNull(gueltigBis, "gueltigBis darf nicht null sein - Optional.empty() statt null");
+        Objects.requireNonNull(sitzung, "sitzung darf nicht null sein - Optional.empty() statt null");
+        Objects.requireNonNull(fehlermeldung, "fehlermeldung darf nicht null sein - Optional.empty() statt null");
         institutsname = institutsname == null ? institut.name() : institutsname;
     }
 

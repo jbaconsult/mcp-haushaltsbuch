@@ -27,8 +27,8 @@ public record Kontobefund(
         Objects.requireNonNull(referenz, "referenz darf nicht null sein");
         Objects.requireNonNull(waehrung, "waehrung darf nicht null sein");
         Objects.requireNonNull(bezeichnung, "bezeichnung darf nicht null sein");
-        iban = iban == null ? Optional.empty() : iban;
-        kontoart = kontoart == null ? Optional.empty() : kontoart;
-        produktname = produktname == null ? Optional.empty() : produktname;
+        Objects.requireNonNull(iban, "iban darf nicht null sein - Optional.empty() statt null");
+        Objects.requireNonNull(kontoart, "kontoart darf nicht null sein - Optional.empty() statt null");
+        Objects.requireNonNull(produktname, "produktname darf nicht null sein - Optional.empty() statt null");
     }
 }

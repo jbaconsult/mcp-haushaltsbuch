@@ -38,6 +38,6 @@ public record ExternerSaldo(
         Objects.requireNonNull(waehrung, "waehrung darf nicht null sein");
         Objects.requireNonNull(abgerufenAm, "abgerufenAm darf nicht null sein");
         artOriginal = artOriginal == null ? art.name() : artOriginal;
-        referenzdatum = referenzdatum == null ? Optional.empty() : referenzdatum;
+        Objects.requireNonNull(referenzdatum, "referenzdatum darf nicht null sein - Optional.empty() statt null");
     }
 }

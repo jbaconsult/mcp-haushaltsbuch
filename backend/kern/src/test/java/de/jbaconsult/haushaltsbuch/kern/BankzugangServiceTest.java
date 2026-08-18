@@ -206,6 +206,118 @@ class BankzugangServiceTest {
         assertThat(speicher.alleKonten()).hasSize(1);
     }
 
+    @Test
+    @DisplayName("die gewünschte Gültigkeit wird an der Obergrenze des Instituts gekappt")
+    void gueltigkeitWirdGekappt() {
+        AnbieterAttrappe anbieter = new AnbieterAttrappe();
+        BankzugangService dienst = dienst(anbieter);
+        benutzerkontext.setzen(ICH);
+
+        dienst.autorisierungStarten(
+                new InstitutKennung("Testbank", "DE"),
+                Duration.ofDays(365),
+                "https://beispiel.invalid/rueck",
+                Optional.empty());
+
+        // Das Institut erlaubt 180 Tage. Eine längere Anfrage würde abgelehnt, und zwar mit einer
+        // Meldung, die auf den Zeitraum nicht hinweist.
+        assertThat(anbieter.letzterWunsch.gueltigBis()).isEqualTo(JETZT.plus(Duration.ofDays(180)));
+    }
+
+    @Test
+    @DisplayName("ein unbekanntes Institut wird abgelehnt, bevor etwas angelegt wird")
+    void unbekanntesInstitutWirdAbgelehnt() {
+        AnbieterAttrappe anbieter = new AnbieterAttrappe();
+        BankzugangService dienst = dienst(anbieter);
+        benutzerkontext.setzen(ICH);
+
+        assertThatThrownBy(() -> dienst.autorisierungStarten(
+                        new InstitutKennung("Gibtsnicht", "DE"),
+                        Duration.ofDays(180),
+                        "https://beispiel.invalid/rueck",
+                        Optional.empty()))
+                .isInstanceOf(Zugangsfehler.class);
+
+        assertThat(dienst.zugaenge()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("ohne angemeldeten Benutzer wird kein Zugang eingerichtet")
+    void ohneBenutzerKeinZugang() {
+        BankzugangService dienst = dienst(new AnbieterAttrappe());
+
+        // Kein setzen() - Bankzugänge werden immer für einen Menschen eingerichtet.
+        assertThatThrownBy(() -> dienst.autorisierungStarten(
+                        new InstitutKennung("Testbank", "DE"),
+                        Duration.ofDays(180),
+                        "https://beispiel.invalid/rueck",
+                        Optional.empty()))
+                .isInstanceOf(Zugangsfehler.class)
+                .hasMessageContaining("angemeldeter Benutzer");
+    }
+
+    @Test
+    @DisplayName("ein Abruf übernimmt Konten und Salden aus der laufenden Sitzung")
+    void abrufUebernimmtKonten() {
+        AnbieterAttrappe anbieter = new AnbieterAttrappe();
+        anbieter.meldetKonto = true;
+        BankzugangService dienst = dienst(anbieter);
+        benutzerkontext.setzen(ICH);
+
+        Bankzugang zugang = autorisierterZugang();
+        speicher.anlegen(zugang);
+
+        dienst.abrufen(zugang.id());
+
+        assertThat(dienst.konten()).hasSize(1);
+        ExternesKontoId kontoId = dienst.konten().get(0).id();
+        assertThat(dienst.letzteSalden(kontoId)).hasSize(1);
+
+        // Ein zweiter Abruf darf kein zweites Konto erzeugen - erkannt an der stabilen Kennung.
+        dienst.abrufen(zugang.id());
+        assertThat(dienst.konten()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("die Feldmessung braucht einen nutzbaren Zugang und ein Konto in der Sitzung")
+    void feldmessung() {
+        AnbieterAttrappe anbieter = new AnbieterAttrappe();
+        anbieter.meldetKonto = true;
+        BankzugangService dienst = dienst(anbieter);
+        benutzerkontext.setzen(ICH);
+
+        Bankzugang zugang = autorisierterZugang();
+        speicher.anlegen(zugang);
+        dienst.abrufen(zugang.id());
+
+        ExternesKontoId kontoId = dienst.konten().get(0).id();
+        assertThat(dienst.feldabdeckungMessen(kontoId).anzahlBuchungen()).isEqualTo(3);
+
+        // Ein unbekanntes Konto endet mit einer Auskunft, nicht mit einer leeren Messung.
+        assertThatThrownBy(() -> dienst.feldabdeckungMessen(ExternesKontoId.neu()))
+                .isInstanceOf(Zugangsfehler.class);
+    }
+
+    @Test
+    @DisplayName("Institute werden durchgereicht")
+    void instituteDurchgereicht() {
+        assertThat(dienst(new AnbieterAttrappe()).institute("DE")).hasSize(1);
+    }
+
+    private Bankzugang autorisierterZugang() {
+        return new Bankzugang(
+                BankzugangId.neu(),
+                "Testanbieter",
+                new InstitutKennung("Testbank", "DE"),
+                "Testbank",
+                Bankzugangstatus.AUTORISIERT,
+                Optional.of(JETZT.plusSeconds(3600)),
+                Optional.of(new Sitzungskennung("sitzung")),
+                Optional.empty(),
+                ICH,
+                JETZT.minusSeconds(3600));
+    }
+
     private BankzugangService dienst(AnbieterAttrappe anbieter) {
         return new BankzugangService(anbieter, speicher, benutzerkontext, Clock.fixed(JETZT, ZoneOffset.UTC));
     }
@@ -216,8 +328,10 @@ class BankzugangServiceTest {
     private static final class AnbieterAttrappe implements BankanbieterPort {
 
         String letzterZustand;
+        Autorisierungswunsch letzterWunsch;
         String fehlerBeimEroeffnen;
         boolean sitzungBesteht = true;
+        boolean meldetKonto;
         int eroeffnungenVersucht;
         int bestandsabfragen;
 
@@ -235,6 +349,7 @@ class BankzugangServiceTest {
         @Override
         public Autorisierungsstart autorisierungStarten(Autorisierungswunsch wunsch) {
             letzterZustand = wunsch.zustand();
+            letzterWunsch = wunsch;
             return new Autorisierungsstart("https://institut.invalid/anmelden");
         }
 
@@ -250,17 +365,32 @@ class BankzugangServiceTest {
         @Override
         public Zugangsbestand bestand(Sitzungskennung sitzung) {
             bestandsabfragen++;
-            return sitzungBesteht ? new Zugangsbestand(true, List.of()) : Zugangsbestand.nichtMehrAutorisiert();
+            if (!sitzungBesteht) {
+                return Zugangsbestand.nichtMehrAutorisiert();
+            }
+            return new Zugangsbestand(true, meldetKonto ? List.of(befund()) : List.of());
+        }
+
+        private Kontobefund befund() {
+            return new Kontobefund(
+                    new Kontokennung("stabil-eins"),
+                    new Kontoreferenz("fluechtig-eins"),
+                    Optional.empty(),
+                    "EUR",
+                    Optional.empty(),
+                    Optional.empty(),
+                    "Testkonto");
         }
 
         @Override
         public List<ExternerSaldo> salden(Sitzungskennung sitzung, Kontoreferenz konto) {
-            return List.of();
+            return List.of(
+                    new ExternerSaldo(Saldenart.GEBUCHT, "CLBD", Betrag.von("42.00"), "EUR", Optional.empty(), JETZT));
         }
 
         @Override
         public Feldabdeckung feldabdeckungMessen(Sitzungskennung sitzung, Kontoreferenz konto) {
-            return new Feldabdeckung(0, List.of(), List.of());
+            return new Feldabdeckung(3, List.of(), List.of());
         }
     }
 
