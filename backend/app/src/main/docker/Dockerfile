@@ -14,9 +14,14 @@ FROM maven:3.9-eclipse-temurin-21 AS bau
 
 WORKDIR /bau
 
+# Jedes Modul einzeln, damit eine Aenderung an einem nicht die Schichten der
+# anderen verwirft. Die Liste muss zu den <modules> in pom.xml passen - fehlt
+# eines, bricht der Build mit "Child module ... does not exist", und zwar erst
+# im Container, nicht beim lokalen Bauen.
 COPY pom.xml .
 COPY kern       kern/
 COPY persistenz persistenz/
+COPY bankzugang bankzugang/
 COPY mcp        mcp/
 COPY api        api/
 COPY app        app/

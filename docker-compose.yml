@@ -53,6 +53,30 @@ services:
       OIDC_AUTH_SERVER_URL: ${OIDC_AUTH_SERVER_URL:?OIDC_AUTH_SERVER_URL fehlt - siehe .env.example}
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-haushaltsbuch-backend}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:?OIDC_CLIENT_SECRET fehlt - siehe .env.example}
+
+      # --- Bankzugang ---------------------------------------------------------
+      # Ohne diese Werte startet die Anwendung normal und meldet beim ersten
+      # Versuch, dass der Zugang nicht eingerichtet ist. Deshalb hier KEIN
+      # Pflicht-Platzhalter mit ":?" - eine Anwendung, die wegen eines fehlenden
+      # Bankzugangs nicht hochkommt, nimmt Dashboard, Ledger und Anmeldung mit.
+      #
+      # Auch die Anwendungs-ID kommt aus der Umgebung. Sie ist kein Geheimnis,
+      # sondern nur die Schluesselkennung im JWT-Kopf - aber jede
+      # Fremdinstallation bringt eine eigene mit.
+      BANKZUGANG_BASIS_URL: ${BANKZUGANG_BASIS_URL:-https://api.enablebanking.com}
+      BANKZUGANG_ANWENDUNGS_ID: ${BANKZUGANG_ANWENDUNGS_ID:-}
+      BANKZUGANG_RUECKLEITUNG: ${BANKZUGANG_RUECKLEITUNG:-http://localhost:3000/bank/rueckleitung}
+      BANKZUGANG_GUELTIGKEIT_TAGE: ${BANKZUGANG_GUELTIGKEIT_TAGE:-180}
+      BANKZUGANG_LAND: ${BANKZUGANG_LAND:-DE}
+      # Pfad INNERHALB des Containers. Der Schluessel wird eingehaengt, nicht
+      # eingebacken - ein Schluessel im Abbild liegt in jeder Registry, aus der
+      # jemand das Abbild zieht.
+      BANKZUGANG_SCHLUESSEL_PFAD: /run/secrets/bankzugang-schluessel.pem
+    volumes:
+      # Nur lesend. Die Datei liegt ausserhalb des Repositoriums; der Pfad kommt
+      # aus BANKZUGANG_SCHLUESSEL_DATEI und hat absichtlich keinen Vorgabewert im
+      # Repositorium - er zeigt auf die Maschine, nicht auf das Projekt.
+      - ${BANKZUGANG_SCHLUESSEL_DATEI:-./.bankzugang-schluessel.pem}:/run/secrets/bankzugang-schluessel.pem:ro
     ports:
       - "${BACKEND_PORT:-8080}:8080"
 

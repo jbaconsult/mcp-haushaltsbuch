@@ -42,6 +42,9 @@ export default async function Startseite() {
         <p className="mt-2 text-gedaempft">
           Übersicht für beide. Die eigentliche Arbeit passiert im Gespräch.
         </p>
+        <a href="/bank" className="mt-4 inline-block text-sm text-akzent hover:underline">
+          Bankzugänge und abgerufene Salden →
+        </a>
       </header>
 
       <section>

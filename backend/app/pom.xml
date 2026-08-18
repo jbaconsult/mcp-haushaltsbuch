@@ -30,6 +30,15 @@
             <groupId>de.jbaconsult.haushaltsbuch</groupId>
             <artifactId>api</artifactId>
         </dependency>
+        <!--
+          Der Adapter zum Bankanbieter wird hier gebunden und nirgends sonst. kern
+          kennt nur den Port; welcher Anbieter ihn bedient, entscheidet der Runner.
+          Ein Wechsel ist damit ein Austausch dieser Zeile plus Konfiguration.
+        -->
+        <dependency>
+            <groupId>de.jbaconsult.haushaltsbuch</groupId>
+            <artifactId>bankzugang</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>io.quarkus</groupId>

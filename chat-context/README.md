@@ -57,6 +57,7 @@ Aggregierte Größen sind in Ordnung, wenn sie zum Verständnis einer Entscheidu
 | [2026-08-17](2026-08-17-scaffolding.md) | Scaffolding: Stack, Struktur, Zugriffskontrolle, CI |
 | [2026-08-17](2026-08-17-dispatch-ledger-grundschema.md) | Dispatch: Ledger-Grundschema und validierender Importer |
 | [2026-08-17](2026-08-17-rueckgabe-ledger-grundschema.md) | Rückgabe zum Dispatch Ledger-Grundschema |
+| [2026-08-18](2026-08-18-rueckgabe-durchstich-bankzugang.md) | Rückgabe zum Dispatch Durchstich Bankzugang |
 
 ## Aufträge und ihre Rückgaben
 
