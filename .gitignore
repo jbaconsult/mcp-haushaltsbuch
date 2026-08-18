@@ -6,6 +6,13 @@
 *.pem
 *.p12
 *.jks
+*.key
+# Der private Schluessel des Bankzugangs. Steht hier, bevor er existiert - eine
+# Datei, die erst nach ihrem ersten Commit ausgeschlossen wird, ist in der
+# Historie und dort nicht mehr zu entfernen. Der Compose-Vorgabewert zeigt
+# hierher, damit ein versehentlich im Projekt abgelegter Schluessel trotzdem
+# nicht mitwandert.
+.bankzugang-schluessel.pem
 
 # --- Echte Kontodaten -----------------------------------------------------
 # Zielbild ist Open Source. Importe und Auszüge bleiben lokal.
