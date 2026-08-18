@@ -435,8 +435,9 @@ class BankzugangServiceTest {
     void unbekannterZugangWirdAbgelehnt() {
         BankzugangService dienst = dienst(new AnbieterAttrappe());
         benutzerkontext.setzen(ICH);
+        BankzugangId unbekannt = BankzugangId.neu();
 
-        assertThatThrownBy(() -> dienst.entfernen(BankzugangId.neu(), Kontenbehandlung.BEHALTEN))
+        assertThatThrownBy(() -> dienst.entfernen(unbekannt, Kontenbehandlung.BEHALTEN))
                 .isInstanceOf(Zugangsfehler.class);
     }
 

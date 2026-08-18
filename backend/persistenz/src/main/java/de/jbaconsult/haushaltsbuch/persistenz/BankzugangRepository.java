@@ -31,6 +31,9 @@ import de.jbaconsult.haushaltsbuch.kern.Kontokennung;
 @ApplicationScoped
 public class BankzugangRepository implements BankzugangPort {
 
+    /** Name des Abfrageparameters für den Bankzugang. */
+    private static final String P_ZUGANG = "zugang";
+
     private final EntityManager entityManager;
     private final RlsKontext rlsKontext;
 
@@ -100,7 +103,7 @@ public class BankzugangRepository implements BankzugangPort {
                         UPDATE ExternesKontoEntity k
                            SET k.bankzugangId = NULL
                          WHERE k.bankzugangId = :zugang
-                        """).setParameter("zugang", id.wert()).executeUpdate();
+                        """).setParameter(P_ZUGANG, id.wert()).executeUpdate();
 
         entity(id).ifPresent(entityManager::remove);
         return geloest;
@@ -123,11 +126,11 @@ public class BankzugangRepository implements BankzugangPort {
                         DELETE FROM ExternerSaldoEntity s
                          WHERE s.externesKontoId IN (SELECT k.id FROM ExternesKontoEntity k
                                                       WHERE k.bankzugangId = :zugang)
-                        """).setParameter("zugang", id.wert()).executeUpdate();
+                        """).setParameter(P_ZUGANG, id.wert()).executeUpdate();
 
         return entityManager
                 .createQuery("DELETE FROM ExternesKontoEntity k WHERE k.bankzugangId = :zugang")
-                .setParameter("zugang", id.wert())
+                .setParameter(P_ZUGANG, id.wert())
                 .executeUpdate();
     }
 
@@ -251,7 +254,7 @@ public class BankzugangRepository implements BankzugangPort {
                          WHERE k.bankzugangId = :zugang
                          ORDER BY k.bezeichnung
                         """, ExternesKontoEntity.class)
-                .setParameter("zugang", zugang.wert())
+                .setParameter(P_ZUGANG, zugang.wert())
                 .getResultList()
                 .stream()
                 .map(ExternesKontoEntity::zuDomaene)

@@ -34,6 +34,8 @@ public class BankzugangService {
     /** 32 Byte Zufall. Ein ratbarer Zustandswert wäre dasselbe wie gar keiner. */
     private static final int ZUSTAND_BYTES = 32;
 
+    private static final String NICHT_GEFUNDEN = "Bankzugang nicht gefunden: ";
+
     /**
      * Der Anbieter wird als {@link Instance} gehalten und nicht unmittelbar injiziert.
      *
@@ -156,8 +158,7 @@ public class BankzugangService {
                 .orElseThrow(() -> new Zugangsfehler(
                         "Der Autorisierungsvorgang ist unbekannt, abgelaufen oder wurde bereits abgeschlossen."));
 
-        Bankzugang zugang =
-                speicher.findeZugang(id).orElseThrow(() -> new Zugangsfehler("Bankzugang nicht gefunden: " + id));
+        Bankzugang zugang = speicher.findeZugang(id).orElseThrow(() -> new Zugangsfehler(NICHT_GEFUNDEN + id));
 
         Zugangseroeffnung eroeffnung;
         try {
@@ -171,7 +172,7 @@ public class BankzugangService {
         Bankzugang autorisiert = zugang.autorisiert(eroeffnung.sitzung(), eroeffnung.gueltigBis());
         speicher.aktualisieren(autorisiert);
 
-        uebernehmen(autorisiert, eroeffnung.konten(), eroeffnung.sitzung(), jetzt);
+        uebernehmen(autorisiert, eroeffnung.konten(), eroeffnung.sitzung());
         return autorisiert;
     }
 
@@ -189,8 +190,7 @@ public class BankzugangService {
                 .orElseThrow(() -> new Zugangsfehler(
                         "Der Autorisierungsvorgang ist unbekannt, abgelaufen oder wurde bereits abgeschlossen."));
 
-        Bankzugang zugang =
-                speicher.findeZugang(id).orElseThrow(() -> new Zugangsfehler("Bankzugang nicht gefunden: " + id));
+        Bankzugang zugang = speicher.findeZugang(id).orElseThrow(() -> new Zugangsfehler(NICHT_GEFUNDEN + id));
 
         Bankzugang gescheitert = zugang.fehlgeschlagen(meldung);
         speicher.aktualisieren(gescheitert);
@@ -211,8 +211,7 @@ public class BankzugangService {
     public Bankzugang abrufen(BankzugangId id) {
         Instant jetzt = uhr.instant();
 
-        Bankzugang zugang =
-                speicher.findeZugang(id).orElseThrow(() -> new Zugangsfehler("Bankzugang nicht gefunden: " + id));
+        Bankzugang zugang = speicher.findeZugang(id).orElseThrow(() -> new Zugangsfehler(NICHT_GEFUNDEN + id));
 
         Bankzugang geprueft = zugang.mitAblaufGeprueft(jetzt);
         if (geprueft != zugang) {
@@ -242,7 +241,7 @@ public class BankzugangService {
             return beendet;
         }
 
-        uebernehmen(geprueft, bestand.konten(), sitzung, jetzt);
+        uebernehmen(geprueft, bestand.konten(), sitzung);
         return geprueft;
     }
 
@@ -273,15 +272,18 @@ public class BankzugangService {
      * Oberfläche sagen kann, dass der Widerruf dort noch aussteht.
      */
     public Zugangsentfernung entfernen(BankzugangId id, Kontenbehandlung kontenbehandlung) {
-        Bankzugang zugang =
-                speicher.findeZugang(id).orElseThrow(() -> new Zugangsfehler("Bankzugang nicht gefunden: " + id));
+        Bankzugang zugang = speicher.findeZugang(id).orElseThrow(() -> new Zugangsfehler(NICHT_GEFUNDEN + id));
 
         boolean sitzungBeendet = false;
         Optional<String> anbietermeldung = Optional.empty();
 
-        if (zugang.sitzung().isPresent()) {
+        // Die Sitzung wird einmal gelesen und festgehalten. Zweimal denselben Accessor zu rufen
+        // waere zwar korrekt, macht aber aus Sicht jeder Analyse zwei unabhaengige Optionals - und
+        // damit aus dem geprueften Zugriff einen ungeprueften.
+        Optional<Sitzungskennung> sitzung = zugang.sitzung();
+        if (sitzung.isPresent()) {
             try {
-                anbieter().sitzungBeenden(zugang.sitzung().get());
+                anbieter().sitzungBeenden(sitzung.get());
                 sitzungBeendet = true;
             } catch (Zugangsfehler fehler) {
                 anbietermeldung = Optional.of(fehler.getMessage());
@@ -365,7 +367,7 @@ public class BankzugangService {
      * <p>Erkennung über {@link Kontokennung}: eine zweite Autorisierung desselben Kontos
      * aktualisiert den vorhandenen Datensatz, statt einen zweiten anzulegen.
      */
-    private void uebernehmen(Bankzugang zugang, List<Kontobefund> befunde, Sitzungskennung sitzung, Instant jetzt) {
+    private void uebernehmen(Bankzugang zugang, List<Kontobefund> befunde, Sitzungskennung sitzung) {
 
         for (Kontobefund befund : befunde) {
             ExternesKontoId kontoId = speicher.kontoUebernehmen(new ExternesKonto(

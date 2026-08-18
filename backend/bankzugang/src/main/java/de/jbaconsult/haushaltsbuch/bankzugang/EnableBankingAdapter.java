@@ -60,6 +60,9 @@ public class EnableBankingAdapter implements BankanbieterPort {
 
     private static final String ANBIETER = "Enable Banking";
 
+    /** Pfad der Sitzungsressource. Auch die Erkennung der erloschenen Sitzung haengt daran. */
+    private static final String SITZUNGSPFAD = "/sessions/";
+
     /** Wie viele Buchungen die Feldmessung höchstens betrachtet. */
     private static final int MESSUMFANG = 200;
 
@@ -187,7 +190,7 @@ public class EnableBankingAdapter implements BankanbieterPort {
     @Override
     public void sitzungBeenden(Sitzungskennung sitzung) {
         try {
-            senden("DELETE", "/sessions/" + sitzung.wert(), null, Optional.empty());
+            senden("DELETE", SITZUNGSPFAD + sitzung.wert(), null, Optional.empty());
         } catch (Zugangsfehler fehler) {
             if (!fehler.istSitzungUngueltig()) {
                 throw fehler;
@@ -199,7 +202,7 @@ public class EnableBankingAdapter implements BankanbieterPort {
     public Zugangsbestand bestand(Sitzungskennung sitzung) {
         JsonNode antwort;
         try {
-            antwort = holen("/sessions/" + sitzung.wert(), Optional.empty());
+            antwort = holen(SITZUNGSPFAD + sitzung.wert(), Optional.empty());
         } catch (Zugangsfehler fehler) {
             if (fehler.istSitzungUngueltig()) {
                 return Zugangsbestand.nichtMehrAutorisiert();
@@ -535,7 +538,7 @@ public class EnableBankingAdapter implements BankanbieterPort {
         // 401 und 403 auf einer Sitzung heissen: die Autorisierung gilt nicht mehr. Das ist kein
         // Netzfehler und darf nicht als solcher behandelt werden - ein Netzfehler dürfte keinen
         // Zugang entwerten, dieser Fall muss es.
-        boolean sitzungWeg = pfad.startsWith("/sessions/")
+        boolean sitzungWeg = pfad.startsWith(SITZUNGSPFAD)
                 && (antwort.statusCode() == 401 || antwort.statusCode() == 403 || antwort.statusCode() == 404);
 
         throw new Zugangsfehler(
