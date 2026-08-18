@@ -1,0 +1,197 @@
+# =============================================================================
+# Release
+#
+#   git tag -a v0.1.0 -m "..." && git push origin v0.1.0
+#
+# Legt Backend und Frontend unter benannten Versionen in GHCR ab:
+#
+#   v0.1.0      -> :0.1.0  :0.1        :latest
+#   v1.2.3      -> :1.2.3  :1.2  :1    :latest
+#   v1.0.0-rc.1 -> :1.0.0-rc.1          (bewegt nichts Gleitendes)
+#
+# Abgrenzung zu pull-request.yml: dort entstehen Images fuer JEDEN Stand, unter
+# fluechtigen Namen (:main, :pr-42) und mit dem Commit-Kuerzel daneben. Sie
+# beantworten "laeuft dieser Stand". Hier entsteht ein Image unter einem Namen,
+# den ein Mensch vergeben hat und der eine Zusage traegt - und deshalb faellt
+# hier auch die Entscheidung, was :latest ist.
+#
+# Die Pruefungen laufen NICHT noch einmal. Ein Tag zeigt auf einen Commit, der
+# den Weg ueber main genommen hat und dort vollstaendig geprueft wurde; ein
+# zweiter Lauf pruefte denselben Baum mit demselben Ergebnis. Damit das keine
+# Annahme bleibt, wird unten nachgesehen, ob der Commit wirklich auf main liegt.
+# =============================================================================
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# Zwei Releases gleichzeitig gibt es nicht, und ein laufendes darf nicht
+# abgebrochen werden - ein halb hochgeladenes Manifest ist schlimmer als ein
+# spaeter fertiges.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Erst pruefen, dann bauen. Beide Images sollen entweder zusammen entstehen
+  # oder gar nicht - ein Release, bei dem nur das Backend eine Version traegt,
+  # ist schlechter als keines.
+  pruefen:
+    name: Tag prüfen
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    outputs:
+      tags: ${{ steps.ableiten.outputs.tags }}
+      version: ${{ steps.ableiten.outputs.version }}
+
+    steps:
+      # Die ganze Historie, weil unten geprueft wird, ob der Commit auf main
+      # liegt. Mit einem flachen Klon kennt git den Zusammenhang nicht.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Image-Tags ableiten
+        id: ableiten
+        run: |
+          set -euo pipefail
+
+          git_tag="${GITHUB_REF#refs/tags/}"
+          echo "Git-Tag: $git_tag"
+
+          tags="$(.github/skripte/image-tags.sh "$git_tag")"
+          while IFS= read -r zeile; do echo "  -> $zeile"; done <<< "$tags"
+
+          {
+            echo "tags<<ENDE"
+            echo "$tags"
+            echo "ENDE"
+            echo "version=${git_tag#v}"
+          } >> "$GITHUB_OUTPUT"
+
+      # Ein Tag auf einem Stand, der nie durch die Pipeline lief, ergaebe ein
+      # Release ohne jede Pruefung. Das ist kein theoretischer Fall: ein Tag laesst
+      # sich auf jeden beliebigen Commit setzen, auch auf einen lokalen.
+      - name: Liegt der Commit auf main?
+        run: |
+          set -euo pipefail
+
+          if git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "Der getaggte Commit liegt auf main - er hat die Pipeline durchlaufen."
+          else
+            echo "::error::Der getaggte Commit liegt nicht auf main. Ein Release aus einem Stand, der die Pipeline nie durchlaufen hat, waere ungeprueft."
+            exit 1
+          fi
+
+  # ---------------------------------------------------------------------------
+  images:
+    name: Image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: pruefen
+
+    # Nur hier, nicht am Workflow: Schreibrechte auf die Registry sollen so
+    # wenige Jobs wie moeglich haben.
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      # Kein fail-fast: schlaegt eines fehl, soll am anderen ablesbar sein, ob
+      # es an diesem Image liegt oder an der Registry.
+      fail-fast: false
+      matrix:
+        include:
+          - name: backend
+            context: ./backend
+            dockerfile: ./backend/app/src/main/docker/Dockerfile
+          - name: frontend
+            context: ./frontend
+            dockerfile: ./frontend/Dockerfile
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Bauen und ablegen
+        uses: ./.github/actions/image
+        with:
+          name: ${{ matrix.name }}
+          context: ${{ matrix.context }}
+          dockerfile: ${{ matrix.dockerfile }}
+          tags: ${{ needs.pruefen.outputs.tags }}
+          pushen: "true"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          version: ${{ needs.pruefen.outputs.version }}
+
+  # ---------------------------------------------------------------------------
+  # Was tatsaechlich in der Registry liegt, statt was der Build zu tun glaubte.
+  # Ein Push, der stillschweigend nur einen Teil der Tags setzt, faellt sonst
+  # erst dem auf, der das Image spaeter zieht.
+  nachsehen:
+    name: In der Registry nachsehen
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [pruefen, images]
+
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Anmelden
+        run: echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
+
+      - name: Jeden Tag abrufen
+        run: |
+          set -euo pipefail
+
+          basis="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          fehlt=0
+
+          # Mit ein paar Versuchen statt einem: die Registry ist zwar in aller
+          # Regel sofort konsistent, aber ein falscher Alarm hier waere teuer -
+          # er sagt "Release kaputt" ueber ein Release, das in Ordnung ist.
+          abrufbar() {
+            for _ in 1 2 3 4 5; do
+              docker manifest inspect "$1" > /dev/null 2>&1 && return 0
+              sleep 5
+            done
+            return 1
+          }
+
+          while IFS= read -r tag; do
+            [ -n "$tag" ] || continue
+            for bild in backend frontend; do
+              if abrufbar "${basis}/${bild}:${tag}"; then
+                echo "  ok      ${basis}/${bild}:${tag}"
+              else
+                echo "::error::Fehlt in der Registry: ${basis}/${bild}:${tag}"
+                fehlt=1
+              fi
+            done
+          done <<< '${{ needs.pruefen.outputs.tags }}'
+
+          exit $fehlt
+
+      - name: Zusammenfassung
+        run: |
+          {
+            echo "## Release ${{ needs.pruefen.outputs.version }}"
+            echo
+            echo '```'
+            basis="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+            while IFS= read -r tag; do
+              [ -n "$tag" ] || continue
+              echo "docker pull ${basis}/backend:${tag}"
+              echo "docker pull ${basis}/frontend:${tag}"
+            done <<< '${{ needs.pruefen.outputs.tags }}'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
