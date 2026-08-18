@@ -208,6 +208,13 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+      # Die Ableitung der Release-Tags ist die einzige echte Logik in
+      # release.yml, und die laeuft dort erst, wenn ein Tag gesetzt ist - ein
+      # Fehler darin faellt sonst auf, wenn das Release schon in der Registry
+      # steht. Deshalb wird sie hier bei jedem Lauf mitgeprueft.
+      - name: Ableitung der Release-Tags prüfen
+        run: .github/skripte/image-tags.sh --pruefen
+
       - name: Anwendungsartefakt sichern
         uses: actions/upload-artifact@v4
         with:
@@ -338,19 +345,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # Bewusst ohne docker/setup-buildx-action, docker/login-action und
-      # docker/build-push-action: deren Auslieferung über codeload.github.com
-      # antwortete wiederholt mit HTTP 429 und liess den Job umfallen, ohne dass
-      # je ein Byte gebaut wurde.
-      #
-      # Docker und Buildx sind auf den Runnern vorinstalliert. Die paar Zeilen
-      # Shell ersetzen die Actions vollständig - und hängen von nichts ab, das
-      # erst heruntergeladen werden muss.
-      - name: Buildx vorbereiten
-        run: |
-          docker buildx create --name haushaltsbuch --driver docker-container --use
-          docker buildx inspect --bootstrap
-
       # Ein Pull Request aus einem Fork hat keinen Schreibzugriff auf die
       # Registry. Der Versuch würde den Lauf ohne Erkenntnisgewinn rot färben -
       # gebaut wird trotzdem, damit der Build selbst geprüft ist.
@@ -364,38 +358,38 @@ jobs:
             echo "wert=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: An der Registry anmelden
-        if: steps.pushbar.outputs.wert == 'true'
-        run: echo '${{ secrets.GITHUB_TOKEN }}' | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
-
-      - name: Bauen und pushen
+      # Fluechtige Namen fuer jeden Stand. Der SHA-Tag ist der eigentlich
+      # nuetzliche: der reine pr-42-Tag wird mit jedem Push ueberschrieben. Will
+      # man spaeter nachvollziehen, welches Image zu einem bestimmten Stand
+      # gehoerte, braucht man den unveraenderlichen.
+      #
+      # Benannte Versionen und :latest entstehen NICHT hier, sondern in
+      # release.yml auf einen Versionstag.
+      - name: Tags festlegen
+        id: tags
         run: |
-          set -euo pipefail
-
-          bild="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/${{ matrix.name }}"
-          kurz="${GITHUB_SHA::7}"
-
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             basis="pr-${{ github.event.number }}"
           else
             basis="main"
           fi
 
-          # Der SHA-Tag ist der eigentlich nützliche: der reine pr-42-Tag wird
-          # mit jedem Push überschrieben. Will man später nachvollziehen, welches
-          # Image zu einem bestimmten Stand gehörte, braucht man den
-          # unveränderlichen.
-          args=(--file '${{ matrix.dockerfile }}' --tag "${bild}:${basis}" --tag "${bild}:${basis}-${kurz}")
+          {
+            echo "wert<<ENDE"
+            echo "$basis"
+            echo "${basis}-${GITHUB_SHA::7}"
+            echo "ENDE"
+          } >> "$GITHUB_OUTPUT"
 
-          # Registry-Cache statt type=gha: letzterer braucht Umgebungsvariablen,
-          # die sonst setup-buildx-action setzt.
-          args+=(--cache-from "type=registry,ref=${bild}:cache")
-
-          if [ '${{ steps.pushbar.outputs.wert }}' = 'true' ]; then
-            args+=(--push --cache-to "type=registry,ref=${bild}:cache,mode=max")
-          fi
-
-          docker buildx build "${args[@]}" '${{ matrix.context }}'
+      - name: Bauen und ablegen
+        uses: ./.github/actions/image
+        with:
+          name: ${{ matrix.name }}
+          context: ${{ matrix.context }}
+          dockerfile: ${{ matrix.dockerfile }}
+          tags: ${{ steps.tags.outputs.wert }}
+          pushen: ${{ steps.pushbar.outputs.wert }}
+          token: ${{ secrets.GITHUB_TOKEN }}
 
   # ---------------------------------------------------------------------------
   gate:

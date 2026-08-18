@@ -1,0 +1,118 @@
+# =============================================================================
+# Ein Container-Image bauen und ablegen
+#
+# Gemeinsame Bauweise fuer beide Wege in die Registry: den Lauf je Pull Request
+# und main (pull-request.yml) und das Release auf einen Versionstag
+# (release.yml). Die Tags unterscheiden sich, alles andere nicht - und genau
+# deshalb steht es hier und nicht zweimal nebeneinander.
+#
+# Eine LOKALE Composite Action, kein Marktplatz-Eintrag. Der Unterschied ist
+# nicht kosmetisch: pull-request.yml verzichtet ausdruecklich auf
+# docker/setup-buildx-action und docker/build-push-action, weil deren
+# Auslieferung ueber codeload.github.com wiederholt mit HTTP 429 antwortete und
+# den Job umwarf, bevor ein Byte gebaut war. Diese Datei liegt im Repository und
+# wird mit dem Checkout mitgeliefert - sie kann aus demselben Grund nicht
+# ausfallen.
+# =============================================================================
+
+name: Image bauen
+description: Baut ein Container-Image mit Buildx und legt es optional in GHCR ab.
+
+inputs:
+  name:
+    description: Name des Images unterhalb von ghcr.io/<repo>/
+    required: true
+  context:
+    description: Build-Kontext
+    required: true
+  dockerfile:
+    description: Pfad zum Dockerfile
+    required: true
+  tags:
+    description: |
+      Die Tags, einer je Zeile, ohne Bildnamen. Beispiel:
+
+        main
+        main-abc1234
+    required: true
+  pushen:
+    description: Ob nach GHCR gepusht wird. "false" baut nur.
+    required: true
+  token:
+    description: |
+      Token fuer die Registry. Secrets stehen einer Composite Action nicht von
+      selbst zur Verfuegung - sie muessen uebergeben werden. Wird nur gebraucht,
+      wenn gepusht wird.
+    required: false
+    default: ""
+  version:
+    description: Wert fuer das Label org.opencontainers.image.version
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    # Docker und Buildx sind auf den Runnern vorinstalliert. Der eigene
+    # Builder ist noetig, weil der Standardtreiber weder Registry-Cache noch
+    # mehrere Plattformen beherrscht.
+    - name: Buildx vorbereiten
+      shell: bash
+      run: |
+        docker buildx create --name haushaltsbuch --driver docker-container --use 2>/dev/null \
+          || docker buildx use haushaltsbuch
+        docker buildx inspect --bootstrap
+
+    - name: An der Registry anmelden
+      if: inputs.pushen == 'true'
+      shell: bash
+      env:
+        TOKEN: ${{ inputs.token }}
+      run: |
+        if [ -z "$TOKEN" ]; then
+          echo "::error::pushen=true, aber kein Token uebergeben."
+          exit 1
+        fi
+        echo "$TOKEN" | docker login ghcr.io -u '${{ github.actor }}' --password-stdin
+
+    - name: Bauen und ablegen
+      shell: bash
+      env:
+        NAME: ${{ inputs.name }}
+        KONTEXT: ${{ inputs.context }}
+        DOCKERFILE: ${{ inputs.dockerfile }}
+        TAGS: ${{ inputs.tags }}
+        PUSHEN: ${{ inputs.pushen }}
+        VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+
+        # Der Bildname muss kleingeschrieben sein - die Registry lehnt
+        # Grossbuchstaben ab, GitHub-Organisationen duerfen sie aber tragen.
+        bild="ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')/${NAME}"
+
+        args=(--file "$DOCKERFILE")
+
+        while IFS= read -r tag; do
+          [ -n "$tag" ] || continue
+          echo "  Tag: ${bild}:${tag}"
+          args+=(--tag "${bild}:${tag}")
+        done <<< "$TAGS"
+
+        # Beschreibende Labels nach der OCI-Norm. Ohne sie ist einem Image
+        # spaeter nicht anzusehen, aus welchem Stand es entstand - der Tag allein
+        # traegt diese Auskunft nicht, weil er umgehaengt werden kann.
+        args+=(--label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}")
+        args+=(--label "org.opencontainers.image.revision=${{ github.sha }}")
+        args+=(--label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)")
+        [ -n "$VERSION" ] && args+=(--label "org.opencontainers.image.version=${VERSION}")
+
+        # Registry-Cache statt type=gha: letzterer braucht Umgebungsvariablen,
+        # die sonst setup-buildx-action setzt.
+        args+=(--cache-from "type=registry,ref=${bild}:cache")
+
+        if [ "$PUSHEN" = "true" ]; then
+          args+=(--push --cache-to "type=registry,ref=${bild}:cache,mode=max")
+        fi
+
+        docker buildx build "${args[@]}" "$KONTEXT"

@@ -2,7 +2,10 @@
 
 ## Auslöser
 
-Jeder Pull Request nach `main` sowie Pushes auf `main`.
+Jeder Pull Request nach `main` sowie Pushes auf `main` (`pull-request.yml`).
+
+Dazu ein zweiter Workflow, `release.yml`, ausgelöst durch einen Versionstag `v*` — siehe
+[Release](#release).
 
 Läuft ein zweiter Push auf denselben Branch, wird der vorherige Lauf abgebrochen
 (`concurrency` mit `cancel-in-progress`). Ein Lauf gegen einen überholten Commit hilft
@@ -204,6 +207,10 @@ Registry-Cache kommt mit dem Zugang aus, den der Push ohnehin benötigt.
 |---|---|
 | Pull Request | `pr-<nummer>` und `pr-<nummer>-<sha>` |
 | Push auf `main` | `main` und `main-<sha>` |
+| Versionstag `v0.1.0` | `0.1.0`, `0.1`, `latest` — siehe [Release](#release) |
+
+Alle Tags aus dieser Pipeline sind **flüchtig**: Sie benennen einen Stand, keine Zusage.
+Benannte Versionen und `latest` entstehen ausschliesslich über einen Versionstag.
 
 Der SHA-Tag existiert, weil ein reiner `pr-42`-Tag mit jedem Push überschrieben wird. Will
 man später nachvollziehen, welches Image zu einem bestimmten Stand gehörte, braucht man
@@ -217,6 +224,71 @@ wiederfinden.
 **Bei Pull Requests aus Forks wird nicht gepusht.** Ein Fork-PR hat keinen Schreibzugriff
 auf die Registry — der Versuch würde den Lauf ohne Erkenntnisgewinn rot färben. Gebaut
 wird trotzdem, damit der Build selbst geprüft ist.
+
+## Release
+
+Ein Versionstag legt beide Images unter benannten Versionen ab:
+
+```bash
+git tag -a v0.1.0 -m "Erste Fassung"
+git push origin v0.1.0
+```
+
+| Git-Tag | Image-Tags |
+|---|---|
+| `v0.1.0` | `0.1.0`, `0.1`, `latest` |
+| `v1.2.3` | `1.2.3`, `1.2`, `1`, `latest` |
+| `v1.0.0-rc.1` | `1.0.0-rc.1` — sonst nichts |
+
+Drei Entscheidungen dahinter, alle mit demselben Grund — ein Tag ist ein Versprechen an
+den, der ihn zieht:
+
+**Eine Vorabversion bewegt nichts Gleitendes.** Wer `:0.1` zieht, will keinen Release
+Candidate, und wer `:latest` zieht, erst recht nicht.
+
+**Einen Major-Tag gibt es erst ab 1.** Bei `0.x` sagt SemVer nichts über Kompatibilität
+zu; ein Tag `:0`, der von `0.1` auf `0.2` springt, verspräche eine Stabilität, die es
+ausdrücklich nicht gibt.
+
+**Der Tag wird streng geprüft, nicht wohlwollend geraten.** `v1.2` oder `release-3` lassen
+den Lauf scheitern, statt ein sonderbar benanntes Image abzulegen.
+
+### Warum die Prüfungen nicht noch einmal laufen
+
+Ein Tag zeigt auf einen Commit, der den Weg über `main` genommen hat und dort vollständig
+geprüft wurde. Ein zweiter Lauf prüfte denselben Baum mit demselben Ergebnis.
+
+Damit das keine Annahme bleibt, prüft der Workflow, ob der getaggte Commit tatsächlich ein
+Vorfahr von `origin/main` ist. Ein Tag lässt sich auf jeden beliebigen Commit setzen, auch
+auf einen rein lokalen — daraus entstünde sonst ein Release, das nie eine Pipeline gesehen
+hat.
+
+Nach dem Push wird zusätzlich in der Registry **nachgesehen**, ob jeder erwartete Tag für
+beide Images wirklich abrufbar ist. Ein Push, der stillschweigend nur einen Teil setzt,
+fiele sonst erst dem auf, der das Image zieht.
+
+### Die Ableitung der Tags ist ein Skript, kein YAML
+
+`.github/skripte/image-tags.sh` — mit Selbstprüfung (`--pruefen`), die in der
+Pull-Request-Pipeline mitläuft.
+
+Der Grund: Das ist die einzige echte Logik am Release, und Logik in YAML lässt sich nicht
+ausprobieren. Ein Fehler darin fiele sonst erst auf, wenn der Tag gesetzt ist — und dann
+steht ein falsch benanntes Image in der Registry.
+
+### Gemeinsame Bauweise für beide Wege
+
+Beide Workflows bauen über dieselbe **lokale** Composite Action,
+`.github/actions/image`. Nur die Tags unterscheiden sich; alles andere — Buildx, Anmeldung,
+Registry-Cache, OCI-Labels — steht an einer Stelle statt an zweien.
+
+Lokal und nicht vom Marktplatz, aus demselben Grund wie unten: Sie liegt im Repository und
+kommt mit dem Checkout mit. Sie kann nicht mit HTTP 429 antworten.
+
+Die Images tragen dadurch Labels nach der OCI-Norm (`…image.source`, `…image.revision`,
+`…image.created`, bei Releases zusätzlich `…image.version`). Ohne sie ist einem Image
+später nicht anzusehen, aus welchem Stand es entstand — der Tag allein trägt diese
+Auskunft nicht, weil er umgehängt werden kann.
 
 ## Registry
 
