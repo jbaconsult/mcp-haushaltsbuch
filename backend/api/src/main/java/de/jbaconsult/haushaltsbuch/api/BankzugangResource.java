@@ -8,6 +8,7 @@ import java.util.Optional;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.POST;
@@ -28,6 +29,7 @@ import de.jbaconsult.haushaltsbuch.kern.BankzugangService;
 import de.jbaconsult.haushaltsbuch.kern.ExternesKonto;
 import de.jbaconsult.haushaltsbuch.kern.ExternesKontoId;
 import de.jbaconsult.haushaltsbuch.kern.InstitutKennung;
+import de.jbaconsult.haushaltsbuch.kern.Kontenbehandlung;
 
 /**
  * Bankzugänge, externe Konten und deren Salden für das Dashboard.
@@ -161,6 +163,39 @@ public class BankzugangResource {
     public BankzugangDto abrufen(@PathParam("id") String id) {
         Bankzugang zugang = bankzugangService.abrufen(BankzugangId.von(id));
         return BankzugangDto.von(zugang, Instant.now());
+    }
+
+    /**
+     * Entfernt einen Bankzugang.
+     *
+     * <p>Ein Endpunkt für zwei Beschriftungen. An der Oberfläche heißt es „Vorgang abbrechen",
+     * solange die Autorisierung läuft, und „Zugang entfernen", wenn sie steht - fachlich ist es
+     * derselbe Vorgang, nur mit unterschiedlich viel zu entfernen. Ein zweiter Endpunkt für den
+     * Abbruch hätte dieselbe Bedeutung ein zweites Mal implementiert, und zwei Implementierungen
+     * desselben Vorgangs laufen mit der Zeit auseinander.
+     *
+     * <p>Der Parameter {@code konten} entscheidet über die abgerufenen Konten und Salden. Er hat
+     * bewusst den Standard {@code behalten}: ein vergessener Parameter darf keine Historie
+     * vernichten. Ein unbekannter Wert führt zu 400 statt zu einer stillen Annahme - „behalten"
+     * anzunehmen wäre hier harmlos, „loeschen" nicht, und eine Regel, die je nach Tippfehler
+     * unterschiedlich viel löscht, ist keine.
+     */
+    @DELETE
+    @Path("/{id}")
+    @Consumes(MediaType.WILDCARD)
+    public ZugangsentfernungDto entfernen(@PathParam("id") String id, @QueryParam("konten") String konten) {
+        return ZugangsentfernungDto.von(bankzugangService.entfernen(BankzugangId.von(id), kontenbehandlung(konten)));
+    }
+
+    private static Kontenbehandlung kontenbehandlung(String parameter) {
+        if (parameter == null || parameter.isBlank() || "behalten".equalsIgnoreCase(parameter)) {
+            return Kontenbehandlung.BEHALTEN;
+        }
+        if ("loeschen".equalsIgnoreCase(parameter)) {
+            return Kontenbehandlung.ENTFERNEN;
+        }
+        throw new BadRequestException(
+                "Unbekannter Wert für konten: " + parameter + ". Erlaubt sind behalten und loeschen.");
     }
 
     // ------------------------------------------------------------------ Konten

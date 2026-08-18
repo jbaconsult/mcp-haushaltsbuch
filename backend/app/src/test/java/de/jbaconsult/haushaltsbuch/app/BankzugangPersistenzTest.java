@@ -103,7 +103,7 @@ class BankzugangPersistenzTest {
 
         ExternesKonto uebernommen = mitDieserKennung.get(0);
         assertThat(uebernommen.bezeichnung()).isEqualTo("Girokonto neu benannt");
-        assertThat(uebernommen.bankzugang()).isEqualTo(zweiterZugang.id());
+        assertThat(uebernommen.bankzugang()).contains(zweiterZugang.id());
     }
 
     @Test
@@ -181,6 +181,64 @@ class BankzugangPersistenzTest {
 
     // ------------------------------------------------------------------ Hilfen
 
+    @Test
+    @DisplayName("ein entfernter Zugang löst den Bezug seiner Konten, statt sie mitzunehmen")
+    void entfernenLoestDenBezug() {
+        benutzerkontext.setzen(DEMO_EINS);
+
+        Bankzugang zugang = zugangAnlegen(DEMO_EINS);
+        Kontokennung kennung = new Kontokennung("loesen-" + UUID.randomUUID());
+        ExternesKontoId kontoId = kontoAnlegen(zugang.id(), kennung.wert());
+        speicher.saldoAblegen(kontoId, saldo("100.00"));
+
+        int geloest = speicher.entfernen(zugang.id());
+
+        assertThat(geloest).isEqualTo(1);
+        assertThat(speicher.findeZugang(zugang.id())).isEmpty();
+
+        ExternesKonto uebriges = speicher.findeKonto(kontoId).orElseThrow();
+        assertThat(uebriges.bankzugang())
+                .as("der Fremdschluessel steht auf SET NULL - genau das prueft dieser Test an der Migration")
+                .isEmpty();
+        assertThat(speicher.saldenDesKontos(kontoId))
+                .as("gemessene Vergangenheit ueberlebt das Entfernen ihres Zugangs")
+                .isNotEmpty();
+    }
+
+    @Test
+    @DisplayName("kontenEntfernen nimmt die Salden mit")
+    void kontenEntfernenNimmtSaldenMit() {
+        benutzerkontext.setzen(DEMO_EINS);
+
+        Bankzugang zugang = zugangAnlegen(DEMO_EINS);
+        ExternesKontoId kontoId = kontoAnlegen(zugang.id(), "mitnehmen-" + UUID.randomUUID());
+        speicher.saldoAblegen(kontoId, saldo("250.00"));
+
+        int entfernt = speicher.kontenEntfernen(zugang.id());
+        speicher.entfernen(zugang.id());
+
+        assertThat(entfernt).isEqualTo(1);
+        assertThat(speicher.findeKonto(kontoId)).isEmpty();
+        assertThat(speicher.saldenDesKontos(kontoId)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("ein entfernter Zugang nimmt seinen Zustandswert mit")
+    void entfernenEntwertetDenZustand() {
+        benutzerkontext.setzen(DEMO_EINS);
+
+        Bankzugang zugang = zugangAnlegen(DEMO_EINS);
+        String zustand = "zustand-" + UUID.randomUUID();
+        speicher.zustandHinterlegen(
+                zugang.id(), zustand, DEMO_EINS, Instant.now().plus(15, ChronoUnit.MINUTES));
+
+        speicher.entfernen(zugang.id());
+
+        assertThat(speicher.zustandEinloesen(zustand, DEMO_EINS, Instant.now()))
+                .as("eine Rueckleitung, die spaeter noch eintrifft, darf nichts wiederbeleben")
+                .isEmpty();
+    }
+
     private Bankzugang zugangAnlegen(BenutzerId benutzer) {
         Bankzugang zugang = new Bankzugang(
                 BankzugangId.neu(),
@@ -205,7 +263,7 @@ class BankzugangPersistenzTest {
             ExternesKontoId id, BankzugangId zugang, Kontokennung kennung, String bezeichnung) {
         return new ExternesKonto(
                 id,
-                zugang,
+                Optional.of(zugang),
                 kennung,
                 Optional.empty(),
                 "EUR",

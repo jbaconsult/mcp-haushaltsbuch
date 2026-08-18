@@ -34,7 +34,7 @@ public record ExternesKontoDto(
                 konto.waehrung(),
                 konto.kontoart().orElse(null),
                 konto.produktname().orElse(null),
-                konto.bankzugang().toString(),
+                konto.bankzugang().map(Object::toString).orElse(null),
                 konto.zugeordnetesKonto().map(KontoId::toString).orElse(null),
                 salden.stream().map(SaldoDto::von).toList());
     }

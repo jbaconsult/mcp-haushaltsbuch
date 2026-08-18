@@ -128,7 +128,7 @@ class BankzugangServiceTest {
 
         ExternesKontoId kontoId = speicher.kontoUebernehmen(new ExternesKonto(
                 ExternesKontoId.neu(),
-                zugang.id(),
+                Optional.of(zugang.id()),
                 new Kontokennung("hash"),
                 Optional.empty(),
                 "EUR",
@@ -180,7 +180,7 @@ class BankzugangServiceTest {
 
         ExternesKontoId kontoId = speicher.kontoUebernehmen(new ExternesKonto(
                 ExternesKontoId.neu(),
-                zugang.id(),
+                Optional.of(zugang.id()),
                 new Kontokennung("hash"),
                 Optional.empty(),
                 "EUR",
@@ -318,6 +318,138 @@ class BankzugangServiceTest {
                 JETZT.minusSeconds(3600));
     }
 
+    // ------------------------------------------------------- Zugang entfernen
+
+    @Test
+    @DisplayName("ein abgebrochener Autorisierungsvorgang lässt sich restlos entfernen")
+    void laufenderVorgangLaesstSichEntfernen() {
+        AnbieterAttrappe anbieter = new AnbieterAttrappe();
+        BankzugangService dienst = dienst(anbieter);
+        benutzerkontext.setzen(ICH);
+
+        dienst.autorisierungStarten(
+                new InstitutKennung("Testbank", "DE"),
+                Duration.ofDays(180),
+                "https://beispiel.invalid/rueck",
+                Optional.empty());
+
+        BankzugangId id = speicher.alleZugaenge().get(0).id();
+        assertThat(speicher.alleZugaenge()).hasSize(1);
+
+        Zugangsentfernung ergebnis = dienst.entfernen(id, Kontenbehandlung.BEHALTEN);
+
+        assertThat(speicher.alleZugaenge()).isEmpty();
+        assertThat(anbieter.sitzungenBeendet)
+                .as("ein Vorgang ohne Sitzung hat beim Anbieter nichts zu widerrufen")
+                .isZero();
+        assertThat(ergebnis.brauchtHinweis()).isFalse();
+
+        // Und die Rückleitung, die vielleicht noch unterwegs ist, läuft ins Leere statt einen
+        // gelöschten Zugang wiederzubeleben.
+        assertThatThrownBy(() -> dienst.rueckleitungVerarbeiten(anbieter.letzterZustand, "code-egal"))
+                .isInstanceOf(Zugangsfehler.class);
+    }
+
+    @Test
+    @DisplayName("ein entfernter Zugang widerruft die Autorisierung beim Anbieter")
+    void entfernenWiderruftSitzung() {
+        AnbieterAttrappe anbieter = new AnbieterAttrappe();
+        BankzugangService dienst = dienst(anbieter);
+        benutzerkontext.setzen(ICH);
+
+        Bankzugang zugang = autorisierterZugang(dienst, anbieter);
+
+        dienst.entfernen(zugang.id(), Kontenbehandlung.BEHALTEN);
+
+        assertThat(anbieter.sitzungenBeendet).isEqualTo(1);
+        assertThat(anbieter.zuletztBeendeteSitzung).isEqualTo(new Sitzungskennung("sitzung"));
+    }
+
+    @Test
+    @DisplayName("bei BEHALTEN bleiben Konten und Salden als Bestand stehen")
+    void behaltenLaesstDieZahlenStehen() {
+        AnbieterAttrappe anbieter = new AnbieterAttrappe();
+        anbieter.meldetKonto = true;
+        BankzugangService dienst = dienst(anbieter);
+        benutzerkontext.setzen(ICH);
+
+        Bankzugang zugang = autorisierterZugang(dienst, anbieter);
+        ExternesKonto vorher = speicher.alleKonten().get(0);
+        assertThat(speicher.saldenDesKontos(vorher.id())).isNotEmpty();
+
+        Zugangsentfernung ergebnis = dienst.entfernen(zugang.id(), Kontenbehandlung.BEHALTEN);
+
+        assertThat(ergebnis.entfernteKonten()).isZero();
+        assertThat(ergebnis.geloesteKonten()).isEqualTo(1);
+
+        ExternesKonto nachher = speicher.alleKonten().get(0);
+        assertThat(nachher.bankzugang())
+                .as("der Zugangsbezug ist gelöst, das Konto selbst bleibt")
+                .isEmpty();
+        assertThat(speicher.saldenDesKontos(nachher.id()))
+                .as("gemessene Vergangenheit wird nicht dadurch falsch, dass die Autorisierung endet")
+                .isNotEmpty();
+    }
+
+    @Test
+    @DisplayName("bei ENTFERNEN verschwinden Konten und Salden mit dem Zugang")
+    void entfernenNimmtDieKontenMit() {
+        AnbieterAttrappe anbieter = new AnbieterAttrappe();
+        anbieter.meldetKonto = true;
+        BankzugangService dienst = dienst(anbieter);
+        benutzerkontext.setzen(ICH);
+
+        Bankzugang zugang = autorisierterZugang(dienst, anbieter);
+        ExternesKontoId kontoId = speicher.alleKonten().get(0).id();
+
+        Zugangsentfernung ergebnis = dienst.entfernen(zugang.id(), Kontenbehandlung.ENTFERNEN);
+
+        assertThat(ergebnis.entfernteKonten()).isEqualTo(1);
+        assertThat(speicher.alleKonten()).isEmpty();
+        assertThat(speicher.saldenDesKontos(kontoId)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("ein Anbieter, der den Widerruf verweigert, verhindert das Entfernen nicht")
+    void fehlschlagBeimWiderrufBlockiertNicht() {
+        AnbieterAttrappe anbieter = new AnbieterAttrappe();
+        anbieter.fehlerBeimBeenden = "Der Anbieter ist nicht erreichbar.";
+        BankzugangService dienst = dienst(anbieter);
+        benutzerkontext.setzen(ICH);
+
+        Bankzugang zugang = autorisierterZugang(dienst, anbieter);
+
+        Zugangsentfernung ergebnis = dienst.entfernen(zugang.id(), Kontenbehandlung.BEHALTEN);
+
+        assertThat(speicher.findeZugang(zugang.id()))
+                .as("sonst wäre ein Zugang, dessen Anbieter schweigt, überhaupt nicht loszuwerden")
+                .isEmpty();
+        assertThat(ergebnis.sitzungBeendet()).isFalse();
+        assertThat(ergebnis.anbietermeldung())
+                .as("der ausstehende Widerruf gehört gesagt, nicht geschluckt")
+                .hasValueSatisfying(meldung -> assertThat(meldung).contains("nicht erreichbar"));
+    }
+
+    @Test
+    @DisplayName("ein unbekannter Zugang lässt sich nicht entfernen")
+    void unbekannterZugangWirdAbgelehnt() {
+        BankzugangService dienst = dienst(new AnbieterAttrappe());
+        benutzerkontext.setzen(ICH);
+
+        assertThatThrownBy(() -> dienst.entfernen(BankzugangId.neu(), Kontenbehandlung.BEHALTEN))
+                .isInstanceOf(Zugangsfehler.class);
+    }
+
+    /** Richtet einen vollständig autorisierten Zugang über den regulären Weg ein. */
+    private Bankzugang autorisierterZugang(BankzugangService dienst, AnbieterAttrappe anbieter) {
+        dienst.autorisierungStarten(
+                new InstitutKennung("Testbank", "DE"),
+                Duration.ofDays(180),
+                "https://beispiel.invalid/rueck",
+                Optional.empty());
+        return dienst.rueckleitungVerarbeiten(anbieter.letzterZustand, "code-gut");
+    }
+
     private BankzugangService dienst(AnbieterAttrappe anbieter) {
         return new BankzugangService(anbieter, speicher, benutzerkontext, Clock.fixed(JETZT, ZoneOffset.UTC));
     }
@@ -334,6 +466,9 @@ class BankzugangServiceTest {
         boolean meldetKonto;
         int eroeffnungenVersucht;
         int bestandsabfragen;
+        int sitzungenBeendet;
+        String fehlerBeimBeenden;
+        Sitzungskennung zuletztBeendeteSitzung;
 
         @Override
         public String anbieter() {
@@ -359,7 +494,20 @@ class BankzugangServiceTest {
             if (fehlerBeimEroeffnen != null) {
                 throw new Zugangsfehler(fehlerBeimEroeffnen);
             }
-            return new Zugangseroeffnung(new Sitzungskennung("sitzung"), JETZT.plus(Duration.ofDays(180)), List.of());
+            // Wie beim echten Anbieter: die Sitzungseröffnung liefert die Konten bereits mit.
+            return new Zugangseroeffnung(
+                    new Sitzungskennung("sitzung"),
+                    JETZT.plus(Duration.ofDays(180)),
+                    meldetKonto ? List.of(befund()) : List.of());
+        }
+
+        @Override
+        public void sitzungBeenden(Sitzungskennung sitzung) {
+            sitzungenBeendet++;
+            zuletztBeendeteSitzung = sitzung;
+            if (fehlerBeimBeenden != null) {
+                throw new Zugangsfehler(fehlerBeimBeenden);
+            }
         }
 
         @Override
@@ -464,9 +612,51 @@ class BankzugangServiceTest {
         }
 
         @Override
+        public int entfernen(BankzugangId id) {
+            zugaenge.remove(id);
+            zustaende.values().removeIf(eintrag -> eintrag.zugang().equals(id));
+
+            List<Kontokennung> betroffen = konten.entrySet().stream()
+                    .filter(eintrag ->
+                            eintrag.getValue().bankzugang().filter(id::equals).isPresent())
+                    .map(Map.Entry::getKey)
+                    .toList();
+
+            for (Kontokennung kennung : betroffen) {
+                ExternesKonto konto = konten.get(kennung);
+                konten.put(
+                        kennung,
+                        new ExternesKonto(
+                                konto.id(),
+                                Optional.empty(),
+                                konto.kennung(),
+                                konto.iban(),
+                                konto.waehrung(),
+                                konto.kontoart(),
+                                konto.produktname(),
+                                konto.bezeichnung(),
+                                konto.zugeordnetesKonto()));
+            }
+            return betroffen.size();
+        }
+
+        @Override
+        public int kontenEntfernen(BankzugangId id) {
+            List<ExternesKonto> betroffen = konten.values().stream()
+                    .filter(konto -> konto.bankzugang().filter(id::equals).isPresent())
+                    .toList();
+
+            for (ExternesKonto konto : betroffen) {
+                konten.remove(konto.kennung());
+                salden.remove(konto.id());
+            }
+            return betroffen.size();
+        }
+
+        @Override
         public List<ExternesKonto> kontenDesZugangs(BankzugangId zugang) {
             return konten.values().stream()
-                    .filter(konto -> konto.bankzugang().equals(zugang))
+                    .filter(konto -> konto.bankzugang().filter(zugang::equals).isPresent())
                     .toList();
         }
 

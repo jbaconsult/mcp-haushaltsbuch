@@ -24,6 +24,32 @@ public interface BankzugangPort {
     List<Bankzugang> alleZugaenge();
 
     /**
+     * Entfernt einen Bankzugang samt seinem hinterlegten Zustandswert.
+     *
+     * <p>Externe Konten dieses Zugangs bleiben bestehen und verlieren nur ihren Zugangsbezug. Das
+     * ist Absicht und in der Datenbank verankert: der Fremdschlüssel steht auf {@code SET NULL},
+     * nicht auf {@code CASCADE}. Wer die Konten mit entfernen will, ruft vorher
+     * {@link #kontenEntfernen} - ein zweiter, ausdrücklicher Schritt.
+     *
+     * <p>Der Zustandswert verschwindet mit derselben Zeile. Eine Rückleitung, die danach noch
+     * eintrifft, findet ihn nicht mehr und wird abgelehnt - dasselbe Verhalten wie bei einem
+     * abgelaufenen Vorgang.
+     *
+     * @return wie viele Konten ihren Zugangsbezug verloren haben
+     */
+    int entfernen(BankzugangId id);
+
+    /**
+     * Entfernt die externen Konten eines Zugangs samt ihrer Salden.
+     *
+     * <p>Endgültig. Die Salden gehen über den Fremdschlüssel mit; sie sind ohne ihr Konto ohnehin
+     * bedeutungslos.
+     *
+     * @return wie viele Konten entfernt wurden
+     */
+    int kontenEntfernen(BankzugangId id);
+
+    /**
      * Hinterlegt den Zustandswert eines laufenden Autorisierungsvorgangs.
      *
      * <p>Gebunden an Zugang <b>und</b> Benutzer, mit Ablauf und Verbrauchskennzeichen. Ohne diese

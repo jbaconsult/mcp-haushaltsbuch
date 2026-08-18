@@ -13,8 +13,13 @@ import java.util.Optional;
  * <p>Der Schlüssel ist {@link Kontokennung} und niemals eine Sitzungskennung. Siehe die Begründung
  * dort.
  *
+ * <p>Der Zugangsbezug ist <b>optional</b>. Wird ein Bankzugang entfernt, ohne seine Konten
+ * mitzunehmen, bleiben sie als gemessene Vergangenheit stehen und stehen danach für sich. Ein
+ * Pflichtbezug hätte an dieser Stelle nur zwei Auswege gelassen: die Konten mitzulöschen oder auf
+ * einen Zugang zu zeigen, den es nicht mehr gibt.
+ *
  * @param id Kennung innerhalb dieses Systems
- * @param bankzugang zu welchem Zugang dieses Konto gehört
+ * @param bankzugang zu welchem Zugang dieses Konto gehört; leer, wenn der Zugang entfernt wurde
  * @param kennung stabiler Schlüssel über Sitzungen hinweg
  * @param iban IBAN, sofern der Anbieter sie liefert
  * @param waehrung Währung des Kontos als ISO-Code
@@ -25,7 +30,7 @@ import java.util.Optional;
  */
 public record ExternesKonto(
         ExternesKontoId id,
-        BankzugangId bankzugang,
+        Optional<BankzugangId> bankzugang,
         Kontokennung kennung,
         Optional<Iban> iban,
         String waehrung,
@@ -36,7 +41,7 @@ public record ExternesKonto(
 
     public ExternesKonto {
         Objects.requireNonNull(id, "id darf nicht null sein");
-        Objects.requireNonNull(bankzugang, "bankzugang darf nicht null sein");
+        Objects.requireNonNull(bankzugang, "bankzugang darf nicht null sein - Optional.empty() statt null");
         Objects.requireNonNull(kennung, "kennung darf nicht null sein");
         Objects.requireNonNull(waehrung, "waehrung darf nicht null sein");
         Objects.requireNonNull(bezeichnung, "bezeichnung darf nicht null sein");

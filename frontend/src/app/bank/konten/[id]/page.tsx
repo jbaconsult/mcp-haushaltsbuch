@@ -3,12 +3,12 @@ import Link from "next/link";
 import {
   SALDENART_BESCHRIFTUNG,
   STATUS_BESCHRIFTUNG,
-  backendHolen,
   betragAnzeigen,
   zeitpunktAnzeigen,
   type Bankzugang,
   type ExternesKonto,
 } from "@/lib/bank";
+import { backendHolen } from "@/lib/bank-server";
 
 /**
  * Ein einzelnes von der Bank gemeldetes Konto.
@@ -37,7 +37,13 @@ export default async function Kontoseite({ params }: { params: Promise<{ id: str
     );
   }
 
-  const { daten: zugaenge } = await backendHolen<Bankzugang[]>(["bankzugaenge"]);
+  // Ein Konto ohne Zugangsbezug ist kein Fehler: der Zugang wurde entfernt, die
+  // abgerufenen Zahlen sind geblieben. Das ist etwas anderes als ein Zugang, der
+  // sich gerade nicht laden lässt, und wird unten auch anders gesagt.
+  const zugangEntfernt = konto.bankzugangId === null;
+  const { daten: zugaenge } = zugangEntfernt
+    ? { daten: null }
+    : await backendHolen<Bankzugang[]>(["bankzugaenge"]);
   const zugang = zugaenge?.find((kandidat) => kandidat.id === konto.bankzugangId) ?? null;
 
   return (
@@ -60,6 +66,19 @@ export default async function Kontoseite({ params }: { params: Promise<{ id: str
           />
         </dl>
       </section>
+
+      {zugangEntfernt && (
+        <section className="mb-8">
+          <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-gedaempft">
+            Bankzugang
+          </h2>
+          <p className="text-sm text-gedaempft">
+            Der Bankzugang zu diesem Konto wurde entfernt. Die Salden unten stammen aus dem letzten
+            Abruf und werden nicht mehr aktualisiert. Ein neuer Zugang zum selben Institut findet
+            das Konto an seiner Kennung wieder und knüpft daran an.
+          </p>
+        </section>
+      )}
 
       {zugang && (
         <section className="mb-8">

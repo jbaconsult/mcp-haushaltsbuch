@@ -50,6 +50,8 @@ public class AnbieterAttrappe implements BankanbieterPort {
      */
     private String letzterZustand;
     private String fehlerBeimEroeffnen;
+    private String fehlerBeimBeenden;
+    private int sitzungenBeendet;
     private final List<String> kontokennungen = new ArrayList<>(List.of("stabil-eins"));
 
     /** Der zuletzt erzeugte Zustandswert - damit ein Test die Rückleitung nachstellen kann. */
@@ -62,9 +64,21 @@ public class AnbieterAttrappe implements BankanbieterPort {
         this.fehlerBeimEroeffnen = meldung;
     }
 
+    /** Lässt den Widerruf der Sitzung mit dieser Meldung scheitern. */
+    public void fehlerBeimBeenden(String meldung) {
+        this.fehlerBeimBeenden = meldung;
+    }
+
+    /** Wie oft eine Sitzung beim Anbieter beendet wurde. */
+    public int sitzungenBeendet() {
+        return sitzungenBeendet;
+    }
+
     public void zuruecksetzen() {
         this.letzterZustand = null;
         this.fehlerBeimEroeffnen = null;
+        this.fehlerBeimBeenden = null;
+        this.sitzungenBeendet = 0;
     }
 
     @Override
@@ -91,6 +105,14 @@ public class AnbieterAttrappe implements BankanbieterPort {
         }
         return new Zugangseroeffnung(
                 new Sitzungskennung("sitzung-attrappe"), Instant.now().plus(Duration.ofDays(180)), konten());
+    }
+
+    @Override
+    public void sitzungBeenden(Sitzungskennung sitzung) {
+        sitzungenBeendet++;
+        if (fehlerBeimBeenden != null) {
+            throw new Zugangsfehler(fehlerBeimBeenden);
+        }
     }
 
     @Override

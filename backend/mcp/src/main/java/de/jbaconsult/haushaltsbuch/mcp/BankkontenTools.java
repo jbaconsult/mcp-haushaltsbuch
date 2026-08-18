@@ -165,7 +165,12 @@ public class BankkontenTools {
     }
 
     private String zugangszeile(ExternesKonto konto) {
-        Optional<Bankzugang> zugang = bankzugangService.zugang(konto.bankzugang());
+        if (konto.bankzugang().isEmpty()) {
+            return "Bankzugang: entfernt. Die Zahlen unten stammen aus dem letzten Abruf und werden nicht mehr "
+                    + "aktualisiert.";
+        }
+
+        Optional<Bankzugang> zugang = konto.bankzugang().flatMap(bankzugangService::zugang);
         if (zugang.isEmpty()) {
             return "Bankzugang: nicht auffindbar.";
         }

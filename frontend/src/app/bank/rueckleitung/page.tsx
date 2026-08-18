@@ -1,6 +1,7 @@
 import Link from "next/link";
 
-import { STATUS_BESCHRIFTUNG, backendHolen, type Bankzugang } from "@/lib/bank";
+import { STATUS_BESCHRIFTUNG, type Bankzugang } from "@/lib/bank";
+import { backendHolen } from "@/lib/bank-server";
 
 /**
  * Rückleitung nach der Autorisierung beim Institut.

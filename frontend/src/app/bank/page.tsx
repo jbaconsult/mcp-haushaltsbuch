@@ -1,9 +1,8 @@
 import Link from "next/link";
 
+import { backendHolen } from "@/lib/bank-server";
 import {
   SALDENART_BESCHRIFTUNG,
-  STATUS_BESCHRIFTUNG,
-  backendHolen,
   betragAnzeigen,
   zeitpunktAnzeigen,
   type Bankzugang,
@@ -12,6 +11,7 @@ import {
 } from "@/lib/bank";
 
 import { Zugangsknopf } from "./Zugangsknopf";
+import { Zugangsliste } from "./Zugangsliste";
 
 /**
  * Bankzugänge und die von der Bank gemeldeten Konten.
@@ -20,14 +20,6 @@ import { Zugangsknopf } from "./Zugangsknopf";
  * Liste, ein Knopf, eine Detailansicht. Keine Diagramme und keine Auswertungen;
  * dies ist ein Durchstich, kein Dashboard.
  */
-
-const STATUSFARBE: Record<Bankzugang["status"], string> = {
-  NICHT_AUTORISIERT: "text-gedaempft",
-  AUTORISIERUNG_LAEUFT: "text-akzent",
-  AUTORISIERT: "text-freiberuflich",
-  ABGELAUFEN: "text-finanzamt",
-  FEHLGESCHLAGEN: "text-finanzamt",
-};
 
 export default async function Bankseite() {
   const [zugaenge, konten, institute] = await Promise.all([
@@ -61,31 +53,7 @@ export default async function Bankseite() {
             Weg über die Anmeldung beim Institut.
           </Hinweis>
         ) : (
-          <ul className="divide-y divide-rand overflow-hidden rounded-lg border border-rand bg-flaeche">
-            {zugaenge.daten.map((zugang) => (
-              <li key={zugang.id} className="px-5 py-4">
-                <div className="flex items-baseline justify-between gap-4">
-                  <div>
-                    <div className="font-medium">{zugang.institut}</div>
-                    <div className="text-sm text-gedaempft">{zugang.anbieter}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className={`text-sm font-medium ${STATUSFARBE[zugang.status]}`}>
-                      {STATUS_BESCHRIFTUNG[zugang.status]}
-                    </div>
-                    {zugang.restgueltigkeitTage !== null && (
-                      <div className="text-sm text-gedaempft">
-                        noch {zugang.restgueltigkeitTage} Tage gültig
-                      </div>
-                    )}
-                  </div>
-                </div>
-                {zugang.fehlermeldung && (
-                  <p className="mt-2 text-sm text-finanzamt">{zugang.fehlermeldung}</p>
-                )}
-              </li>
-            ))}
-          </ul>
+          <Zugangsliste zugaenge={zugaenge.daten} />
         )}
 
         <div className="mt-6">

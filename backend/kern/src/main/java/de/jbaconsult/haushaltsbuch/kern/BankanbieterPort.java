@@ -49,6 +49,22 @@ public interface BankanbieterPort {
     Zugangseroeffnung zugangEroeffnen(String autorisierungscode);
 
     /**
+     * Beendet eine Sitzung beim Anbieter und widerruft damit die Autorisierung.
+     *
+     * <p>Das Gegenstück zu {@link #zugangEroeffnen}. Ohne diesen Aufruf verschwindet ein Zugang aus
+     * der eigenen Liste, während beim Anbieter weiterhin eine gültige Autorisierung auf die Konten
+     * dieses Menschen zeigt - bis zu 180 Tage lang. Ein Recht, das jemand widerrufen wollte und das
+     * bloß aus der Anzeige verschwindet, ist nicht widerrufen.
+     *
+     * <p>Eine bereits erloschene Sitzung ist <b>kein</b> Fehler: das Ziel des Aufrufs ist erreicht.
+     * Implementierungen behandeln „gibt es nicht mehr" deshalb als Erfolg und werfen nur, wenn
+     * offen bleibt, ob die Sitzung noch besteht.
+     *
+     * @throws Zugangsfehler wenn der Anbieter nicht erreichbar ist oder den Widerruf ablehnt
+     */
+    void sitzungBeenden(Sitzungskennung sitzung);
+
+    /**
      * Liest den aktuellen Bestand einer Sitzung samt frischer Kontoreferenzen.
      *
      * <p>Liefert {@link Zugangsbestand#nichtMehrAutorisiert()}, wenn die Sitzung beim Anbieter

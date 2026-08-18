@@ -31,7 +31,13 @@ public class ExternesKontoEntity {
     @Id
     public UUID id;
 
-    @Column(name = "bankzugang_id", nullable = false)
+    /**
+     * Zugang, über den dieses Konto bekannt wurde. {@code null}, wenn er entfernt wurde.
+     *
+     * <p>Der Fremdschlüssel steht auf {@code SET NULL}, nicht auf {@code CASCADE}: ein entfernter
+     * Zugang nimmt die abgerufenen Zahlen nicht mit. Sie sind gemessene Vergangenheit.
+     */
+    @Column(name = "bankzugang_id")
     public UUID bankzugangId;
 
     @Column(nullable = false, unique = true)
@@ -61,7 +67,7 @@ public class ExternesKontoEntity {
     public ExternesKonto zuDomaene() {
         return new ExternesKonto(
                 new ExternesKontoId(id),
-                new BankzugangId(bankzugangId),
+                Optional.ofNullable(bankzugangId).map(BankzugangId::new),
                 new Kontokennung(kennung),
                 Optional.ofNullable(iban).flatMap(Iban::lesen),
                 waehrung,

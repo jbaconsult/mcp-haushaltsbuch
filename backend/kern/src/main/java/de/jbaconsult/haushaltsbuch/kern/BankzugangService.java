@@ -246,6 +246,54 @@ public class BankzugangService {
         return geprueft;
     }
 
+    /**
+     * Entfernt einen Bankzugang.
+     *
+     * <p>Deckt beide Fälle ab, die an der Oberfläche verschieden heißen und derselbe Vorgang sind:
+     * den Abbruch eines laufenden Autorisierungsvorgangs und das Entfernen eines eingerichteten
+     * Zugangs. Der Unterschied liegt allein darin, was es zu entfernen gibt - ein Vorgang, der nie
+     * zu einer Autorisierung geführt hat, hat weder Sitzung noch Konten. Zwei Endpunkte für dieselbe
+     * Bedeutung würden mit der Zeit auseinanderlaufen.
+     *
+     * <p>Reihenfolge und ihre Begründung:
+     *
+     * <ol>
+     *   <li><b>Sitzung beim Anbieter beenden.</b> Zuerst, weil danach die Sitzungskennung verloren
+     *       ist. Wer den eigenen Datensatz zuerst löscht, kann die Autorisierung beim Anbieter nie
+     *       mehr widerrufen - sie läuft dann bis zu 180 Tage weiter, ohne dass irgendetwas in
+     *       diesem System noch darauf zeigt.
+     *   <li><b>Konten entfernen</b>, falls verlangt. Vor dem Zugang, weil der Fremdschlüssel auf
+     *       {@code SET NULL} steht und die Konten sonst zurückblieben.
+     *   <li><b>Zugang entfernen</b> samt Zustandswert.
+     * </ol>
+     *
+     * <p>Scheitert Schritt 1, laufen die Schritte 2 und 3 trotzdem. Sonst wäre ein Zugang, dessen
+     * Anbieter gerade nicht antwortet, überhaupt nicht loszuwerden - und der Mensch säße vor einer
+     * Liste, die sich nicht aufräumen lässt. Das Ergebnis trägt die Meldung des Anbieters, damit die
+     * Oberfläche sagen kann, dass der Widerruf dort noch aussteht.
+     */
+    public Zugangsentfernung entfernen(BankzugangId id, Kontenbehandlung kontenbehandlung) {
+        Bankzugang zugang =
+                speicher.findeZugang(id).orElseThrow(() -> new Zugangsfehler("Bankzugang nicht gefunden: " + id));
+
+        boolean sitzungBeendet = false;
+        Optional<String> anbietermeldung = Optional.empty();
+
+        if (zugang.sitzung().isPresent()) {
+            try {
+                anbieter().sitzungBeenden(zugang.sitzung().get());
+                sitzungBeendet = true;
+            } catch (Zugangsfehler fehler) {
+                anbietermeldung = Optional.of(fehler.getMessage());
+            }
+        }
+
+        int entfernteKonten = kontenbehandlung == Kontenbehandlung.ENTFERNEN ? speicher.kontenEntfernen(id) : 0;
+        int geloesteKonten = speicher.entfernen(id);
+
+        return new Zugangsentfernung(sitzungBeendet, anbietermeldung, entfernteKonten, geloesteKonten);
+    }
+
     public List<Bankzugang> zugaenge() {
         Instant jetzt = uhr.instant();
         return speicher.alleZugaenge().stream()
@@ -290,8 +338,10 @@ public class BankzugangService {
         ExternesKonto konto = speicher.findeKonto(kontoId)
                 .orElseThrow(() -> new Zugangsfehler("Externes Konto nicht gefunden: " + kontoId));
 
-        Bankzugang zugang = speicher.findeZugang(konto.bankzugang())
-                .orElseThrow(() -> new Zugangsfehler("Bankzugang nicht gefunden."))
+        Bankzugang zugang = konto.bankzugang()
+                .flatMap(speicher::findeZugang)
+                .orElseThrow(() -> new Zugangsfehler("Zu diesem Konto besteht kein Bankzugang mehr. "
+                        + "Ohne Autorisierung ist beim Anbieter nichts abzurufen."))
                 .mitAblaufGeprueft(jetzt);
 
         if (!zugang.istNutzbar(jetzt)) {
@@ -320,7 +370,7 @@ public class BankzugangService {
         for (Kontobefund befund : befunde) {
             ExternesKontoId kontoId = speicher.kontoUebernehmen(new ExternesKonto(
                     ExternesKontoId.neu(),
-                    zugang.id(),
+                    Optional.of(zugang.id()),
                     befund.kennung(),
                     befund.iban(),
                     befund.waehrung(),

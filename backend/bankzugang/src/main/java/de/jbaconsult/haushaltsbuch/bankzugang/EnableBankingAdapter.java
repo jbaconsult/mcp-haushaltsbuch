@@ -173,6 +173,28 @@ public class EnableBankingAdapter implements BankanbieterPort {
         return new Zugangseroeffnung(new Sitzungskennung(sitzung), gueltigBis, kontenLesen(antwort.path("accounts")));
     }
 
+    /**
+     * Beendet die Sitzung beim Anbieter.
+     *
+     * <p>Eine Sitzung, die es nicht mehr gibt, gilt als erfolgreich beendet. Das ist keine
+     * Nachsicht, sondern das Ziel des Aufrufs: die Autorisierung soll nicht mehr bestehen, und sie
+     * besteht nicht mehr. Wer hier eine Ausnahme wirft, meldet dem Menschen einen Fehlschlag für
+     * einen Zustand, den er gerade herstellen wollte.
+     *
+     * <p>Alles andere - Netzfehler, 500er, abgelehnter Widerruf - wird durchgereicht. Dort bleibt
+     * offen, ob die Autorisierung noch gilt, und das gehört gesagt statt geschluckt.
+     */
+    @Override
+    public void sitzungBeenden(Sitzungskennung sitzung) {
+        try {
+            senden("DELETE", "/sessions/" + sitzung.wert(), null, Optional.empty());
+        } catch (Zugangsfehler fehler) {
+            if (!fehler.istSitzungUngueltig()) {
+                throw fehler;
+            }
+        }
+    }
+
     @Override
     public Zugangsbestand bestand(Sitzungskennung sitzung) {
         JsonNode antwort;
@@ -496,6 +518,12 @@ public class EnableBankingAdapter implements BankanbieterPort {
         }
 
         if (antwort.statusCode() >= 200 && antwort.statusCode() < 300) {
+            // Ein leerer Rumpf ist kein Fehler. Ein DELETE quittiert je nach Anbieter mit 204 und
+            // ohne Inhalt; readTree wuerde daran scheitern und einen geglueckten Aufruf als
+            // unlesbare Antwort melden.
+            if (antwort.body() == null || antwort.body().isBlank()) {
+                return json.createObjectNode();
+            }
             try {
                 return json.readTree(antwort.body());
             } catch (Exception unlesbar) {

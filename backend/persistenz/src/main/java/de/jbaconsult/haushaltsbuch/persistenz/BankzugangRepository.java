@@ -81,6 +81,56 @@ public class BankzugangRepository implements BankzugangPort {
                 .toList();
     }
 
+    /**
+     * Entfernt einen Bankzugang.
+     *
+     * <p>Der Zugangsbezug der Konten wird hier ausdrücklich genullt und nicht der Datenbank
+     * überlassen. Zwar tut {@code ON DELETE SET NULL} dasselbe, aber Hibernate hält die Konten
+     * dieser Transaktion womöglich schon im Persistenzkontext - dort stünde nach dem Löschen
+     * weiterhin die alte Kennung, und der nächste Lesezugriff bekäme sie zurück. Die Datenbank
+     * bleibt die Absicherung, nicht der einzige Weg.
+     */
+    @Override
+    @Transactional
+    public int entfernen(BankzugangId id) {
+        rlsKontext.anwenden();
+
+        int geloest =
+                entityManager.createQuery("""
+                        UPDATE ExternesKontoEntity k
+                           SET k.bankzugangId = NULL
+                         WHERE k.bankzugangId = :zugang
+                        """).setParameter("zugang", id.wert()).executeUpdate();
+
+        entity(id).ifPresent(entityManager::remove);
+        return geloest;
+    }
+
+    /**
+     * Entfernt die externen Konten eines Zugangs samt ihrer Salden.
+     *
+     * <p>Die Salden werden ausdrücklich zuerst gelöscht. Der Fremdschlüssel trägt zwar
+     * {@code ON DELETE CASCADE}, aber eine Bulk-Anweisung auf den Konten umgeht den
+     * Persistenzkontext - die Salden blieben dann bis zum Flush als verwaiste Verweise stehen und
+     * die Reihenfolge entschiede über den Erfolg. Explizit ist sie nachvollziehbar.
+     */
+    @Override
+    @Transactional
+    public int kontenEntfernen(BankzugangId id) {
+        rlsKontext.anwenden();
+
+        entityManager.createQuery("""
+                        DELETE FROM ExternerSaldoEntity s
+                         WHERE s.externesKontoId IN (SELECT k.id FROM ExternesKontoEntity k
+                                                      WHERE k.bankzugangId = :zugang)
+                        """).setParameter("zugang", id.wert()).executeUpdate();
+
+        return entityManager
+                .createQuery("DELETE FROM ExternesKontoEntity k WHERE k.bankzugangId = :zugang")
+                .setParameter("zugang", id.wert())
+                .executeUpdate();
+    }
+
     // ----------------------------------------------------------------- Zustand
 
     @Override
@@ -166,7 +216,7 @@ public class BankzugangRepository implements BankzugangPort {
             entity.angelegtAm = jetzt;
         }
 
-        entity.bankzugangId = konto.bankzugang().wert();
+        entity.bankzugangId = konto.bankzugang().map(BankzugangId::wert).orElse(null);
         entity.iban = konto.iban().map(Iban::wert).orElse(null);
         entity.waehrung = konto.waehrung();
         entity.kontoart = konto.kontoart().orElse(null);
