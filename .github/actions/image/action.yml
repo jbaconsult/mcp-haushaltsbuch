@@ -46,7 +46,10 @@ inputs:
     required: false
     default: ""
   version:
-    description: Wert fuer das Label org.opencontainers.image.version
+    description: |
+      Die Version, die das Image von sich meldet. Wird als Build-Arg HB_VERSION
+      hineingereicht und zusaetzlich als OCI-Label gesetzt. Leer bedeutet: das
+      Image meldet "dev".
     required: false
     default: ""
 
@@ -105,7 +108,15 @@ runs:
         args+=(--label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}")
         args+=(--label "org.opencontainers.image.revision=${{ github.sha }}")
         args+=(--label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)")
-        [ -n "$VERSION" ] && args+=(--label "org.opencontainers.image.version=${VERSION}")
+
+        # Die Version geht zweimal hinein, und beides wird gebraucht: als Label,
+        # damit sie am Image ablesbar ist, und als Build-Arg, damit die
+        # Anwendung sie selbst melden kann. Ein Label liest zur Laufzeit
+        # niemand.
+        if [ -n "$VERSION" ]; then
+          args+=(--label "org.opencontainers.image.version=${VERSION}")
+          args+=(--build-arg "HB_VERSION=${VERSION}")
+        fi
 
         # Registry-Cache statt type=gha: letzterer braucht Umgebungsvariablen,
         # die sonst setup-buildx-action setzt.

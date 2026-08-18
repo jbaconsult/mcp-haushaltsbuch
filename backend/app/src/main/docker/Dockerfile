@@ -73,6 +73,12 @@ EXPOSE 8080
 
 ENV JAVA_OPTS_APPEND="-XX:MaxRAMPercentage=75"
 
+# Die Version, die die Anwendung ueber MCP und OpenAPI meldet. Wird vom
+# Release-Build aus dem Git-Tag gesetzt; wer das Image von Hand baut, bekommt
+# "dev" - und das ist ehrlicher als eine Zahl, die nichts benennt.
+ARG HB_VERSION=dev
+ENV HB_VERSION=${HB_VERSION}
+
 # Der Health-Endpunkt kommt aus quarkus-smallrye-health und ist in der
 # Konfiguration ausdruecklich von der Anmeldepflicht ausgenommen.
 #
