@@ -4,6 +4,12 @@
 .env.*
 !.env.example
 *.pem
+
+# Gerenderte Keycloak-Realms tragen aktive Client-Secrets. Die Vorlage
+# realm-haushaltsbuch.json.tmpl gehoert ins Repo, ihr gerendertes Ergebnis
+# niemals - siehe infra/keycloak/README-realm.md. Ein einmal committetes Secret
+# ist auch nach "git rm" noch in der Historie.
+infra/keycloak/realms-rendered/
 *.p12
 *.jks
 *.key

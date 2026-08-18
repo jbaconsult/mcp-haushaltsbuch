@@ -66,6 +66,16 @@
             <artifactId>rest-assured</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Stellt eine Identität ohne echten Identity Provider bereit. Gebraucht
+             fuer genau einen Fall, der sich sonst nicht pruefen laesst: angemeldet,
+             aber keinem fachlichen Benutzer zugeordnet. Ohne diese Erweiterung waere
+             im Testprofil jede Identitaet entweder anonym oder zugeordnet - und der
+             teuerste Zustand der Anmeldung bliebe ungeprueft. -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-test-security</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>

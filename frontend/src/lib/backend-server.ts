@@ -1,10 +1,16 @@
 /**
- * Serverseitiger Zugriff auf die Bank-Endpunkte des Backends.
+ * Serverseitiger Zugriff auf das Backend, mit angehängtem Zugriffstoken.
  *
- * Getrennt von `bank.ts`, weil hier die Sitzung gelesen wird. Stünde beides in
- * einer Datei, zöge jede Client Component, die auch nur eine Beschriftung von dort
- * braucht, die Sitzungsverwaltung des BFF in ihr Bündel - und der Build bricht ab,
- * sobald `next/headers` im Browser landet.
+ * Getrennt von `backend.ts` und `bank.ts`, weil hier die Sitzung gelesen wird.
+ * Stünde das in einer Datei mit Typen und Beschriftungen, zöge jede Client
+ * Component, die auch nur eine Beschriftung von dort braucht, die
+ * Sitzungsverwaltung des BFF in ihr Bündel - und der Build bricht ab, sobald
+ * `next/headers` im Browser landet.
+ *
+ * Jede Server Component, die etwas vom Backend braucht, geht über diese Datei.
+ * Ein direkter `fetch` ohne Token liefert in Produktion ein 401, und zwar erst
+ * dort - im Entwicklungsprofil läuft er durch, weil das Backend ohne OIDC
+ * arbeitet.
  */
 
 import { aktuelleSitzung } from "@/lib/sitzung";

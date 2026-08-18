@@ -8,7 +8,7 @@ import {
   type Bankzugang,
   type ExternesKonto,
 } from "@/lib/bank";
-import { backendHolen } from "@/lib/bank-server";
+import { backendHolen } from "@/lib/backend-server";
 
 /**
  * Ein einzelnes von der Bank gemeldetes Konto.
