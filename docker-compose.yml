@@ -4,10 +4,10 @@
 #   cp .env.example .env    # Platzhalter ausfüllen
 #   make hoch
 #
-# OIDC läuft gegen den externen Keycloak aus OIDC_AUTH_SERVER_URL - für die
-# Entwicklung auth.jbaconsult.com, in Produktion auth.kumbuka.ai. Wer ohne
-# externen Identity-Provider arbeiten will, nimmt docker-compose.ci.yml: der
-# bringt einen eigenen Keycloak mit.
+# OIDC läuft gegen den externen Keycloak aus OIDC_AUTH_SERVER_URL. Es gibt genau
+# einen Realm auf auth.kumbuka.ai, ohne Trennung zwischen Entwicklung und
+# Produktion - siehe ADR-0009. Wer ohne externen Identity-Provider arbeiten will,
+# nimmt docker-compose.ci.yml: der bringt einen eigenen Keycloak mit.
 #
 # Für die tägliche Arbeit ist der Quarkus Dev Mode angenehmer - er startet
 # Postgres selbst und lädt Änderungen ohne Neustart. Siehe make backend-dev.
@@ -25,7 +25,11 @@ services:
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - postgres-daten:/var/lib/postgresql/data
+      # Postgres 18 legt die Daten in ein versionsspezifisches Unterverzeichnis.
+      # Der Mount gehört deshalb auf /var/lib/postgresql, NICHT auf .../data -
+      # sonst findet das Image die Daten an der alten Stelle, erkennt sie als
+      # verwaist und verweigert den Start.
+      - postgres-daten:/var/lib/postgresql
     healthcheck:
       # Mit -U und -d, sonst prüft pg_isready gegen die Standarddatenbank und
       # meldet "bereit", bevor die eigentliche Datenbank angelegt ist.

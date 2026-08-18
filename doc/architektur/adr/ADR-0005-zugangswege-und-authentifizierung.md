@@ -2,10 +2,25 @@
 
 | | |
 |---|---|
-| Status | Angenommen |
+| Status | Angenommen — in zwei Punkten revidiert durch ADR-0009 |
 | Datum | 2026-08-17 |
 | Kumbuka | `constraint.zugangswege-und-auth` |
-| Verhältnis | Ergänzt ADR-0001. Vorbedingung für ADR-0006 |
+| Verhältnis | Ergänzt ADR-0001. Vorbedingung für ADR-0006. Revidiert durch ADR-0009 |
+
+> **Hinweis zur Revision.** Zwei Aussagen dieser ADR gelten nicht mehr.
+>
+> Erstens die **Aufwandsaussage** im Abschnitt A3: die Behauptung, eine Instanz laufe bereits
+> und die Grenzkosten seien ein Realm-Import, war eine Annahme im Gewand eines Befunds. Unter
+> der vorgesehenen Adresse existierte keine Instanz, und für die MCP-Fähigkeit genügt eine
+> Standard-Distribution ohnehin nicht.
+>
+> Zweitens das **Onboarding von MCP-Clients**: die Vorstellung eines Clients mit fest
+> vergebener Kennung und Secret ist überholt. Die Client-Identität kommt aus dem
+> Metadatendokument des Anbieters oder aus dynamischer Registrierung.
+>
+> Beides ist in ADR-0009 behandelt. Die **Grundentscheidung dieser ADR bleibt unberührt**:
+> zwei Adapter über einer Domänenschicht, die Anwendung als reiner Resource Server ohne
+> eigenen IdP-Code, keine Zahlungsauslösung.
 
 ## Kontext
 
@@ -73,8 +88,11 @@ Schlüsselrotation.
 ### A3 — Keycloak, Anwendung als Resource Server (gewählt)
 
 Der Einwand „Keycloak ist für diesen Zweck zu groß" richtet sich gegen das *Installieren*
-eines Providers, nicht gegen das *Benutzen* eines bereits laufenden. Wo eine Instanz vorhanden
-ist, sind die Grenzkosten ein Realm-Import.
+eines Providers, nicht gegen das *Benutzen* eines bereits laufenden.
+
+*(Der ursprünglich hier notierte Zusatz, die Grenzkosten seien bei vorhandener Instanz ein
+Realm-Import, ist zurückgezogen — siehe Hinweis am Kopf und ADR-0009. Die Wahl selbst bleibt
+richtig, ihre Begründung war an dieser Stelle zu billig.)*
 
 ### A4 — MCP nur lokal betreiben und die Authentifizierung ganz vermeiden
 
@@ -92,4 +110,7 @@ MCP-Ausrichtung begründet.
   Zahlungsauslösedienstes. Für ein Open-Source-Projekt ist das der Unterschied zwischen
   „liest Kontoumsätze" und einer Aufsichtsfrage.
 - Der Preis: ein zusätzlicher Container in der Fremdinstallation. Vertretbar, weil er
-  optional konfigurierbar bleibt und die Alternativen teurer sind.
+  optional konfigurierbar bleibt und die Alternativen teurer sind. **Präzisierung durch
+  ADR-0009:** für die MCP-Fähigkeit genügt kein beliebiger Keycloak, sondern nur einer mit
+  der dort beschriebenen Erweiterung. Was das für Fremdinstallationen bedeutet, ist dort als
+  offener Punkt geführt.
