@@ -1,0 +1,130 @@
+# ===========================================================================
+# hhb — MCP-Haushaltsbuch, EIN vHost.
+#
+#     hhb.jbaconsult.com  -> Dashboard (Next.js) + BFF, REST, MCP, Rechtstexte
+#
+# Warum ein Host und nicht drei wie bei kumbuka: dort erzwingt die Bildung der
+# MCP-Resource-Id aus der oeffentlichen Basisadresse einen eigenen Host, und der
+# BFF setzt sein Sitzungscookie am Console-Host. Hier faellt beides zusammen —
+# der BFF liegt IM Frontend (Next.js Route Handler), nicht im Backend, also ist
+# das Cookie ohnehin same-origin mit dem Dashboard. Sollte die MCP-Kette aus
+# ADR-0009 spaeter einen eigenen Host verlangen, ist das eine Aufteilung dieses
+# Blocks und keine Umkehrung.
+#
+# Ablage: neben kumbuka.caddy im Verzeichnis, das die Hauptdatei per
+#     import /etc/caddy/sites/*.caddy
+# einliest. Der Caddy-Container braucht HHB_DOMAIN in seiner Umgebung.
+#
+# Upstreams werden per Containername auf kumbuka-internal erreicht. Die drei
+# Dienste des Haushaltsbuchs muessen also auf diesem Netz liegen — entweder in
+# denselben Stack gefaltet oder als externer Teilnehmer. Das ist eine offene
+# Entscheidung; dieser Block setzt nur die Namen voraus.
+#
+# NB zu X-Forwarded-Proto: pinned, nicht weggelassen. Das Backend liest mit
+# allow-forwarded sonst die RFC-7239-Kopfzeile statt der X-Forwarded-Familie.
+# X-Forwarded-Host setzt Caddy von selbst und wird deshalb nicht gepinnt.
+#
+# NB zur Reihenfolge: Caddy wertet handle-Bloecke in QUELLTEXTREIHENFOLGE aus.
+# Jeder engere Pfad muss vor dem weiteren stehen. Das ist der Grund fuer die
+# benannten Matcher statt blosser Pfadmuster.
+# ===========================================================================
+
+{$HHB_DOMAIN} {
+    encode zstd gzip
+
+    # --- Rechtstexte -----------------------------------------------------
+    # Statisch, ohne Anwendung. Beide Adressen sind bei der Registrierung der
+    # Produktionsanwendung des Kontoinformationsdienstes hinterlegt und sollen
+    # nicht ins Leere zeigen. Host-verwalteter Webroot, read-only gebunden —
+    # dasselbe Muster wie die kumbuka-Webroots.
+    @rechtstexte path /privacy /terms
+    handle @rechtstexte {
+        root * /var/www/hhb
+        try_files {path}.html {path}
+        file_server
+    }
+
+    # --- Verwaltungsendpunkte des Backends -------------------------------
+    # Health, OpenAPI und was Erweiterungen sonst dort ablegen. Nie oeffentlich;
+    # die Ueberwachung erreicht sie ueber das interne Netz. MUSS vor allen
+    # weiteren Backend-Regeln stehen.
+    @verwaltung path /q /q/*
+    handle @verwaltung {
+        abort
+    }
+
+    # --- BFF-Routen des Frontends ----------------------------------------
+    # Vom Frontend selbst beantwortet, NICHT vom Backend. Die @api-Regel unten
+    # schickt sonst jedes /api/* zum Backend, und dann antwortet das Dashboard
+    # flaechendeckend mit 401 — es haelt das Token, der Browser nicht.
+    # Wer hier kuerzt, erzeugt genau diesen Fehler; er sieht aus wie ein
+    # Anmeldeproblem und ist ein Routingproblem.
+    @bff path /api/bff /api/bff/*
+    handle @bff {
+        reverse_proxy hhb-frontend:3000
+    }
+
+    # --- REST fuer Maschinen-Clients -------------------------------------
+    # Bearer-Token noetig. Gedacht fuer die Hausautomatisierung aus ADR-0005,
+    # nicht fuer den Browser.
+    @api path /api /api/*
+    handle @api {
+        reverse_proxy hhb-backend:8080 {
+            header_up X-Forwarded-Proto https
+        }
+    }
+
+    # --- MCP -------------------------------------------------------------
+    # Laut HB-05 die primaere Schnittstelle. Bis die Registrierungskette aus
+    # ADR-0009 gebaut ist, ist der Endpunkt geschuetzt und aus einem KI-Client
+    # nicht erreichbar — erwarteter Zustand, kein Mangel.
+    #
+    # Wenn die Kette kommt, gehoeren hier zwei Dinge dazu, die heute bewusst
+    # fehlen: eine Route fuer /.well-known/oauth-protected-resource zum Backend,
+    # und die WWW-Authenticate-Zeile mit dem Zeiger auf dieses Dokument, weil
+    # Quarkus ein bares "Bearer" sendet. KEIN pauschales /.well-known/* — auf
+    # dieser Domaene koennte die Zertifikatsausstellung ueber HTTP-01 laufen,
+    # und die braucht /.well-known/acme-challenge fuer sich.
+    #
+    # Ebenfalls dann faellig: eine Ratenbegrenzung auf den Authorization-Kopf,
+    # wie sie der MCP-Host von kumbuka fuehrt. Heute waere sie eine Begrenzung
+    # fuer einen Endpunkt, den niemand erreichen kann.
+    @mcp path /mcp /mcp/*
+    handle @mcp {
+        reverse_proxy hhb-backend:8080 {
+            header_up X-Forwarded-Proto https
+        }
+    }
+
+    # --- Alles uebrige: Dashboard ----------------------------------------
+    # Anmeldung, Kontenuebersicht, Bankrueckleitung unter /bank/rueckleitung.
+    handle {
+        reverse_proxy hhb-frontend:3000
+    }
+
+    # Next.js emittiert Inline-Skript und -Style beim Hydrieren; ein striktes
+    # script-src 'self' ohne Nonce-Infrastruktur bricht die Anwendung. Deshalb
+    # dieselbe permissive-aber-vorhandene Haltung wie beim kumbuka-Console-Host.
+    # HSTS bewusst OHNE preload — das ist eine kaum umkehrbare Festlegung.
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'"
+        -Server
+    }
+
+    # Zugriffsprotokoll: JSON in eine rollende Datei, nicht nach stdout.
+    # Authorization und Cookie redigiert Caddy von selbst. 14 Tage Aufbewahrung
+    # ueber roll_keep_for — dieselbe Haltung wie die uebrigen Hosts: keine
+    # personenbezogene Aggregation, begrenzte Vorhaltung.
+    log {
+        output file /var/log/caddy/hhb-access.log {
+            roll_size 50mb
+            roll_keep 10
+            roll_keep_for 336h
+        }
+        format json
+    }
+}

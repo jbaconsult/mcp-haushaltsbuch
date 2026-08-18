@@ -44,7 +44,14 @@ logs: ## Protokolle des Entwicklungsstacks
 
 .PHONY: backend-dev
 backend-dev: ## Quarkus Dev Mode - startet Postgres selbst, lädt Änderungen ohne Neustart
-	cd $(BACKEND) && $(MVN) quarkus:dev
+	# Aufruf aus dem Runner-Modul, nicht vom Aggregator: Maven löst das
+	# Ziel-Präfix "quarkus" am obersten Projekt auf, und dort ist das Plugin
+	# nicht deklariert. Ein -pl app hilft nicht - es filtert den Reactor, nicht
+	# die Präfixauflösung.
+	#
+	# Braucht ein JDK 21; neuere Versionen scheitern im Dev Mode. Siehe
+	# Dockerfile, das gegen dieselbe Version baut.
+	cd $(BACKEND)/app && ../$(MVN) quarkus:dev
 
 .PHONY: frontend-dev
 frontend-dev: ## Next.js Dev Server
