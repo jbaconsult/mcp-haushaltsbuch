@@ -38,6 +38,16 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
+# Die Version, die das Dashboard anzeigt. Wird vom Release-Build aus dem Git-Tag
+# gesetzt; ohne sie steht dort "dev".
+#
+# Bewusst erst in der Laufzeitstufe und ohne NEXT_PUBLIC_-Praefix: die Fusszeile
+# wird serverseitig gerendert. Ein Wert, der in das Browser-Buendel eingebacken
+# wuerde, muesste bei jeder Version neu gebaut werden - so genuegt ein anderer
+# Wert im Container.
+ARG HB_VERSION=dev
+ENV HB_VERSION=${HB_VERSION}
+
 RUN addgroup -S haushalt && adduser -S haushalt -G haushalt
 
 # Der Standalone-Modus buendelt den Server samt der tatsaechlich benoetigten
